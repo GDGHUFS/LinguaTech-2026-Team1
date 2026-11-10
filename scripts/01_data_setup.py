@@ -1,4 +1,4 @@
-"""[A] CoPriva/CAMBER 다운로드 및 원본 보존.
+"""[B] CoPriva/CAMBER 다운로드 및 원본 보존.
 출처, 라이선스, 파일 구조, 버전 Metadata 저장.
 
 두 데이터셋의 실제 Field 및 Scenario 단위 분석.

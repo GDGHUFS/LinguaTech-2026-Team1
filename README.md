@@ -13,8 +13,8 @@
 
 
 ## 담당
-- [A]: Rule Engine과 데이터 구축
-- [B]: Predictor와 학습
+- [A]: Rule Engine과 Gold State/Decision 계산
+- [B]: 데이터셋 재구성·생성·라벨링·분할 코드, Predictor와 학습
 - [C]: 실험과 평가. `[각자]`는 각 담당자가 자신의 모듈을 테스트한다는 뜻.
 
 ## 폴더 구조
@@ -32,10 +32,10 @@ conshift/
 │   ├── generated/                   # Qwen이 생성한 멀티턴 대화
 │   ├── labeled/                     # Gold 및 Target Failure Label
 │   └── splits/                      # Train/Validation/ID/OOD 데이터
-├── prompts/                         # [A] 대화 생성·검증 및 Target 판단 프롬프트
-│   ├── generation.txt               # [A] Qwen의 멀티턴 대화 생성용 7-shot 프롬프트
-│   ├── validation.txt               # [A] 생성 대화와 구조화된 규칙의 일치 여부 검증
-│   └── target_decision.txt          # [A] Target LLM의 ALLOW/DENY/CLARIFY 판단
+├── prompts/                         # [B] 대화 생성·검증 및 Target 판단 프롬프트
+│   ├── generation.txt               # [B] Qwen의 멀티턴 대화 생성용 7-shot 프롬프트
+│   ├── validation.txt               # [B] 생성 대화와 구조화된 규칙의 일치 여부 검증
+│   └── target_decision.txt          # [B] Target LLM의 ALLOW/DENY/CLARIFY 판단
 ├── src/
 │   ├── rules/                       # [A] Rule Engine 및 Gold Label
 │   │   ├── schema.py                # [A] Rule, State, Transition 등 구조 정의
@@ -47,10 +47,10 @@ conshift/
 │       ├── metrics.py               # [C] Failure/State 성능 지표
 │       ├── ood_analysis.py          # [C] ID/OOD 성능 및 Representation 분석
 │       └── failure_guided.py        # [C, 선택 H3] 실패 위험 기반 테스트 우선순위
-├── scripts/                          # [A] 데이터 구축
-│   ├── 01_data_setup.py             # [A] CoPriva/CAMBER 다운로드 및 원본 분석
-│   ├── 02_prepare.py                # [A] 대화 생성·검증 및 Gold State/Decision 계산
-│   └── 03_label_and_split.py        # [A] Target Failure Label 수집 및 데이터 분할
+├── scripts/                          # [B] 데이터셋 재구성 (Gold 계산은 [A])
+│   ├── 01_data_setup.py             # [B] CoPriva/CAMBER 다운로드 및 원본 분석
+│   ├── 02_prepare.py                # [B] 대화 생성·검증 / [A] Gold State/Decision 계산
+│   └── 03_label_and_split.py        # [B] Target Failure Label 수집 및 데이터 분할
 ├── train.py                          # [B] Baseline A / ConShift C 학습
 ├── train_type_aware.py               # [C, 선택] Transition Type-aware 실험 B
 ├── evaluate.py                       # [C] ID/OOD 평가 및 모델 비교
