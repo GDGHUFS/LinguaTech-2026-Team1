@@ -1,2 +1,4 @@
-# [공통] Python Dependency 및 버전 관리.
-# PyTorch, Transformers, Datasets, vLLM, scikit-learn 등 실제 사용 패키지 정의.
+# [B] 데이터 검증용 의존성이다. 모델 실행용 패키지는 사용할 환경에 별도로 설치한다.
+pydantic>=2.10,<3
+PyYAML>=6.0,<7
+pytest>=8,<10

@@ -1,3 +1,56 @@
-# [공통] 사용 모델 및 추론 설정.
-# Target LLM(Qwen3-4B-Instruct-2507), 생성용 LLM,
-# ModernBERT 모델명, Revision, Prompt 경로 및 Decoding 설정.
+# [B] Target labeling 전에 revision과 실행 hash를 고정한다.
+status: pilot_initial
+finalized: null
+encoder:
+  model_id: answerdotai/ModernBERT-base
+  revision: null
+  max_length: 2048
+  representation: last_layer_cls
+  turn_representation: token_mean_pooling
+  tokenizer_id: answerdotai/ModernBERT-base
+  tokenizer_revision: null
+  use_fast: true
+  padding_side: right
+  truncation_side: right
+  serialization: '[TURN] [SPEAKER] content [/TURN] ... [REQUEST] [USER] content [/REQUEST]'
+  added_special_tokens: []
+  span_convention: half_open_content_tokens
+predictor:
+  variants: [A, C, C+]
+  dropout: 0.1
+  failure_label: failure_label_unsafe
+  failure_input: last_layer_cls_only
+  state_classes:
+    authorization: [ALLOW, DENY, UNRESOLVED]
+    rule_status: [ACTIVE, REVOKED, EXPIRED, NONE]
+    scope_match: [MATCH, MISMATCH, INCOMPLETE]
+  ignore_index: -100
+  lambda_state: 0.5
+  mu_relevance: 0.2
+  state_loss: mean_of_observed_head_means
+  relevance_loss: masked_binary_cross_entropy
+  relevance_condition: request_span_mean
+  relevance_classifier: linear_tanh_linear
+  supporting_ids_only: positive_only_other_turns_ignored
+  incomplete_turn_relevance: ignored
+  incomplete_request_relevance: ignored
+runtime:
+  dependencies: [torch, transformers, tokenizers]
+  pilot_measurements: pending
+target:
+  model_id: Qwen/Qwen3-4B-Instruct-2507
+  revision: null
+  weights_hash: null
+  chat_template_hash: null
+  temperature: 0
+  do_sample: false
+  max_new_tokens: 64
+  max_new_tokens_status: implementation_initial_pending_pilot
+  format: decision_json
+  format_retry_limit: 1
+  invalid_output: INVALID_OUTPUT
+  protocol_version: null
+generation:
+  model_id: null
+  prompt_version: null
+  shot_count: 0

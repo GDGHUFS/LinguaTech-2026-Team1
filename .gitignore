@@ -42,3 +42,9 @@ outputs/predictions/*
 !outputs/predictions/.gitkeep
 outputs/reports/*
 !outputs/reports/.gitkeep
+# [B] 원본 데이터와 비확정 생성 데이터(unlabeled generation)는 Git에 포함하지 않는다.
+/data/raw/**
+/data/annotated/**
+/data/generated/**
+/data/labeled/**
+/data/splits/**

@@ -1,3 +1,59 @@
-# [공통] 데이터 경로 및 생성·분할 설정.
-# CoPriva/CAMBER 원본 경로, 공통 Label Schema, Turn 수,
-# Transition 분포, ID/OOD Holdout 및 Source Mixing 비율 정의.
+# [B] pilot 실측 전에는 초기 설정으로 사용한다.
+schema_version: 1.0.0
+status: pilot_initial
+finalized: null
+paths:
+  raw: data/raw
+  annotated: data/annotated
+  generated: data/generated
+  labeled: data/labeled
+  splits: data/splits
+sources: [CoPriva, CAMBER]
+source_mix_target: [0.5, 0.5]
+source_candidates_per_source: [50, 100]
+source_mix_final: null
+language: en
+dialogue_turn_range: [4, 12]
+group_key: group_id
+variant_key: variant_group_id
+split:
+  order: [ood_holdout, id_group_split]
+  id_ratios: {train: 0.70, validation: 0.15, id_test: 0.15}
+  ood_compositions: null
+  ood_template_families: null
+  final_manifest_hash: null
+  optimize_on_target_failure: false
+missing_label: null
+ignore_index: -100
+allow_mock_in_real_data: false
+capability_plan:
+  valid_dialogues_per_capability: [15, 25]
+  source_balance: best_effort_equal
+  rule_alignment_gate: 0.95
+  capabilities:
+    CAP01: {name: ADD, relation: RECOMPUTE}
+    CAP02: {name: REVOKE, relation: STATE_CHANGE}
+    CAP03: {name: MODIFY, relation: STATE_CHANGE}
+    CAP04: {name: EXCEPTION, relation: STATE_CHANGE}
+    CAP05: {name: REINSTATE, relation: STATE_CHANGE}
+    CAP06: {name: NO_CHANGE, relation: INVARIANT}
+    CAP07: {name: PARAPHRASE, relation: INVARIANT}
+    CAP08: {name: INDIRECT, relation: INVARIANT}
+    CAP09: {name: MISSING_CONTEXT, relation: RECOMPUTE}
+  require_decision_flip: false
+seed_setup:
+  screening_version: structural-v1
+  # 구조 조건만 검사한다. human review와 외부 gold는 별도로 필요하다.
+  candidates_per_source: 100
+  random_seed: 42
+  inventory: outputs/reports/pilot/seed_inventory.csv
+  sources:
+    CoPriva:
+      repository: hwanchang00/CoPriva
+      revision: 683fcb3c22f43ca82a90db72a49455902508a3bb
+      data_prefix: data/
+      files: [README.md]
+    CAMBER:
+      repository: google-parfait/contextual-privacy-and-security
+      revision: 62e5d4529d291ff0eb1f8f9565f035e8a8827589
+      files: [README.md, LICENSE, camber/confaideplus.csv, camber/privacylensplus.csv]
