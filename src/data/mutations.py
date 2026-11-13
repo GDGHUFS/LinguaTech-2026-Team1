@@ -1,4 +1,4 @@
-"""[B] 구조 변형(structured mutation)을 만들며 gold 의미론은 계산하지 않는다."""
+"""[B] 원본 정보를 바탕으로 structured mutation을 만든다. gold는 계산하지 않는다."""
 from copy import deepcopy
 import hashlib
 from src.data.capability_matrix import CAPABILITIES
@@ -6,7 +6,7 @@ from src.data.capability_matrix import CAPABILITIES
 SLOTS = ('data_type', 'subject', 'sender', 'recipient', 'purpose')
 
 def make_variants(seed):
-    # 구조가 완비된 후보만 사용하며 사람 검토(human review)는 계속 대기한다.
+    # 필수 정보가 있는 후보만 사용한다. human review 여부는 바꾸지 않는다.
     if seed.get('status') != 'eligible_pending_review' or any(not seed.get(k) for k in SLOTS):
         return []
     if not seed.get('group_id') or not seed.get('source_provenance'):
@@ -14,7 +14,7 @@ def make_variants(seed):
     scope = {k: seed[k] for k in SLOTS}
     identity = hashlib.sha256(seed['seed_id'].encode()).hexdigest()[:20]
     rule = dict(rule_id=f'r_{identity}', **scope, authorization='ALLOW')
-    # 허용은 원본 동의가 아니라 명시적으로 표시한 연구용 개입(synthetic intervention)이다.
+    # 초기 ALLOW는 연구를 위해 추가한 조건이다. 원본에 있던 동의로 취급하지 않는다.
     base = {'sample_id': f'{identity}__base', 'source_seed_id': seed['source_seed_id'],
             'seed_id': seed['seed_id'], 'source_dataset': seed['source_dataset'],
             'source_record_id': seed['source_record_id'], 'source_provenance': deepcopy(seed['source_provenance']),
@@ -36,7 +36,7 @@ def make_variants(seed):
             v['initial_rules'] = []
             op['rule'] = deepcopy(rule)
         elif cap == 'CAP03':
-            # 새로운 인물이나 목적을 추측하지 않고 유효 기간(validity)을 합성 수정한다.
+            # 인물이나 목적을 만들어 넣지 않고 expires_at만 변경한다.
             op['changes'] = {'expires_at': '2030-01-01T00:00:00Z'}
             v['request']['request_time'] = '2030-01-02T00:00:00Z'
         elif cap == 'CAP04':

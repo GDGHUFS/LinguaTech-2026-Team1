@@ -1,4 +1,4 @@
-"""[B] 데이터 준비, Target label과 학습에 쓰는 B 내부 schema를 정의한다."""
+"""[B] 데이터 준비와 학습에 사용할 필드와 값의 범위를 정한다."""
 from __future__ import annotations
 
 import json
@@ -90,7 +90,7 @@ class GoldState(Contract):
         return self
 
     def label_ids(self) -> dict[str, int]:
-        """결측 annotation을 채우지 않고 head별 ignore mask를 반환한다."""
+        """head별 label ID를 구한다. annotation이 없는 필드는 ignore_index로 둔다."""
         return {field: IGNORE_INDEX if getattr(self, field) is None else LABEL_TO_ID[enum.__name__][getattr(self, field).value] for field, enum in (("authorization", Authorization), ("rule_status", RuleStatus), ("scope_match", ScopeMatch))}
 
 
@@ -227,26 +227,26 @@ class Sample(Contract):
 
 
 def make_group_id(source_dataset: str, source_seed_id: str) -> str:
-    """같은 CoPriva context나 CAMBER seed에서 나온 variant를 하나의 group으로 묶는다."""
+    """같은 원본에서 나온 variant가 같은 group에 들어가도록 ID를 만든다."""
     return f"{source_dataset}:{source_seed_id}"
 
 
 def failure_labels(gold: Decision | None, target: Decision | None) -> tuple[int | None, int | None]:
-    """유효한 gold와 Target decision이 모두 있을 때 unsafe와 any-error label을 계산한다."""
+    """gold와 Target decision을 비교해 unsafe와 any-error label을 계산한다."""
     if gold is None or target is None:
         return None, None
     return int(gold == Decision.DENY and target == Decision.ALLOW), int(gold != target)
 
 
 def sample_hash(sample: Sample) -> str:
-    """sample 자신의 digest는 제외하고 나머지 내용의 hash를 계산한다."""
+    """저장된 hash 값은 빼고 sample 내용의 hash를 구한다."""
     payload = sample.model_dump(mode="json")
     payload["versions"].pop("content_hash")
     return content_hash(payload)
 
 
 def validate_samples(samples: list[Sample]) -> None:
-    """sample 중복과 source 또는 split 배정의 불일치를 검사한다."""
+    """중복 sample과 source, split 정보의 불일치를 확인한다."""
     seen = set()
     groups, variants, records = {}, {}, {}
     for sample in samples:
@@ -261,13 +261,13 @@ def validate_samples(samples: list[Sample]) -> None:
 
 
 def write_jsonl(path: str | Path, samples: list[Sample]) -> None:
-    """B record를 검증한 뒤 UTF-8 JSONL로 저장한다."""
+    """필드를 검사한 뒤 UTF-8 JSONL로 저장한다."""
     validate_samples(samples)
     Path(path).write_text("".join(sample.model_dump_json() + "\n" for sample in samples), encoding="utf-8")
 
 
 def read_jsonl(path: str | Path) -> list[Sample]:
-    """외부 annotation을 포함한 B record를 읽고 오류가 난 줄을 알려준다."""
+    """JSONL을 읽고 필드를 검사한다. 오류가 있으면 해당 줄을 알려준다."""
     samples = []
     for line_number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
         try:

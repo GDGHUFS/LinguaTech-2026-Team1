@@ -1,4 +1,4 @@
-"""[B] 변형 능력(capability)과 oracle 대기 관계를 정의한다."""
+"""[B] CAP01–09의 mutation 종류와 확인할 expected relation을 정한다."""
 CAPABILITIES = {
  'CAP01': ('ADD', 'RECOMPUTE'), 'CAP02': ('REVOKE', 'STATE_CHANGE'),
  'CAP03': ('MODIFY', 'STATE_CHANGE'), 'CAP04': ('EXCEPTION', 'STATE_CHANGE'),

@@ -1,4 +1,4 @@
-"""[B] 구조 변형(mutation)과 Qwen 생성 pilot을 독립 실행한다."""
+"""[B] structured mutation을 만들고 Qwen에 대화 생성과 검증을 요청한다."""
 import argparse
 from collections import defaultdict
 import csv
@@ -35,7 +35,7 @@ def main():
         parser.error('No structurally eligible seeds; no output written')
     client = QwenClient(args.endpoint, args.model, args.key_env) if args.endpoint else None
     records = [execute(v, client, ROOT / 'prompts') for variants in selected for v in variants]
-    # 같은 seed의 base/variant 쌍(controlled pair)은 실패 사례도 함께 보존한다.
+    # 같은 seed에서 나온 base와 variant는 생성에 실패한 항목도 함께 남긴다.
     groups = defaultdict(list)
     for record in records:
         groups[record['variant_group_id']].append(record)

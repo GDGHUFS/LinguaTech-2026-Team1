@@ -1,4 +1,4 @@
-"""[B] Qwen 호출(generation/semantic validation)과 원시 응답을 보존한다."""
+"""[B] Qwen으로 대화를 생성하고 검증한다. 모델이 보낸 응답도 함께 저장한다."""
 import json
 import os
 import hashlib
@@ -60,7 +60,7 @@ def execute(sample, client, prompt_dir):
         record['errors'] = validate_semantics(result)
         record['validation_status'] = 'rejected' if record['errors'] else 'semantic_pass_oracle_pending'
     except Exception as exc:
-        # 오류 종류(error type)만 기록하여 인증 정보가 응답에 유출되지 않게 한다.
+        # 오류 메시지에 인증 정보가 들어갈 수 있어 오류 종류만 남긴다.
         record['errors'] = [f'{stage}:{type(exc).__name__}']
         if stage == 'generation':
             record['generation_status'] = 'failed'

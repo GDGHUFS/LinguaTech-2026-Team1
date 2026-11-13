@@ -1,8 +1,8 @@
-"""[B] CoPriva/CAMBER 원본을 정규화한다. A oracle이나 C evaluation은 호출하지 않는다.
+"""[B] CoPriva/CAMBER 원본을 읽고 연구에 사용할 항목을 정리한다.
 
-N_total은 원본 query 또는 row 수, N_candidate는 screening 전 추출 수다.
-N_valid는 구조 조건을 통과한 수이며 human review나 gold 검증 통과 수가 아니다.
-제외한 후보도 audit JSONL에 남긴다."""
+N_total은 원본 항목 수, N_candidate는 추출한 후보 수다.
+N_valid는 필수 정보가 갖춰진 후보 수이며, 검토를 마쳤거나 gold가 있다는 뜻은 아니다.
+제외한 후보도 제외 사유와 함께 남긴다."""
 from __future__ import annotations
 
 import ast
@@ -22,7 +22,7 @@ def digest(content: bytes) -> str:
 
 
 def download_source(destination: Path, spec: dict, *, offline: bool = False) -> None:
-    """원본 파일과 upstream Git tree를 보관하고 hash로 무결성을 확인한다."""
+    """원본 파일을 내려받고 upstream Git tree의 hash와 비교한다."""
     destination.mkdir(parents=True, exist_ok=True)
     tree_path = destination / 'upstream_tree.json'
     repo, revision = spec['repository'], spec['revision']
@@ -95,7 +95,7 @@ def base_seed(source, component, record_id, parent, record, relative, file_hash,
 
 
 def screen(seed):
-    """pilot 전에 정한 구조 조건으로 검사한다. 원본 label은 선정 기준으로 쓰지 않는다."""
+    """필수 정보가 있는지 확인한다. 원본 label로 후보를 고르지 않는다."""
     for field in ('data_type', 'subject', 'sender', 'recipient', 'purpose', 'policy_context'):
         if not seed[field]:
             seed['exclusion_reasons'].append(f'missing_{field}')
@@ -190,10 +190,9 @@ def load_source(raw, source, spec):
 
 
 def select_candidates(records, count, random_seed):
-    """component, expansion 또는 context family별로 번갈아 추출한 뒤 screening한다.
+    """특정 유형에 몰리지 않도록 component, expansion, context family별로 후보를 고른다.
 
-    yield는 추출한 후보에 대한 수치다. yield를 높이려고 제외한 후보를 교체하지 않는다.
-    """
+    선정 비율은 추출한 후보를 기준으로 계산한다. 제외된 후보를 다른 항목으로 채우지 않는다."""
     strata = defaultdict(list)
     for record in records:
         key = (record['source_component'], record['source_record'].get('expansion_type', '')) if record['source_dataset'] == 'CAMBER' else (record['source_seed_id'].split('_')[0].rstrip('0123456789abcd'),)

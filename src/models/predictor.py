@@ -1,4 +1,4 @@
-"""[B] ModernBERT 기반 A/C/C+를 구현한다. 외부 annotation은 loss target으로만 쓴다."""
+"""[B] ModernBERT에 failure, state, relevance head를 붙여 A/C/C+를 구성한다."""
 from __future__ import annotations
 import torch
 from torch import nn
@@ -28,14 +28,14 @@ class ModernBertPredictor(nn.Module):
         self.relevance_head = nn.Sequential(nn.Linear(hidden * 2, hidden), nn.Tanh(), nn.Linear(hidden, 1)) if variant == "C+" else None
 
     def architecture(self):
-        """base weights를 다시 받지 않고 모델을 복원할 수 있도록 구조 설정을 반환한다."""
+        """weights와 함께 저장할 모델 설정을 돌려준다."""
         return {"encoder_config": self.encoder.config.to_dict(), "variant": self.variant,
                 "lambda_state": self.lambda_state, "mu_relevance": self.mu_relevance,
                 "dropout": self.dropout.p}
 
     @classmethod
     def from_checkpoint(cls, path, device="cpu"):
-        """신뢰할 수 있는 B checkpoint에서 모델을 복원한다. base weights는 내려받지 않는다."""
+        """B checkpoint에 저장된 설정과 weights로 모델을 불러온다. base weights를 다시 받지 않는다."""
         from transformers import AutoConfig, AutoModel
         payload = torch.load(path, map_location="cpu", weights_only=False)
         architecture = dict(payload["architecture"])
@@ -47,7 +47,7 @@ class ModernBertPredictor(nn.Module):
         return model.to(device).eval()
 
     def save(self, path):
-        """모델 구조와 weights만 저장한다. 같은 tokenizer가 필요하면 별도로 보관한다."""
+        """모델 설정과 weights를 저장한다. tokenizer는 포함하지 않는다."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")
@@ -56,10 +56,10 @@ class ModernBertPredictor(nn.Module):
 
     @torch.no_grad()
     def predict(self, turns, final_request, tokenizer, *, max_length=2048, output_path=None):
-        """history turns와 현재 request만으로 failure probability를 계산한다.
+        """이전 대화와 마지막 요청을 받아 failure probability를 계산한다.
 
-        turns에는 마지막 request를 넣지 않는다. 결과에 truncation 여부를 함께 남기며,
-        request가 잘렸으면 잘못된 확률을 반환하지 않고 중단한다."""
+        turns에는 마지막 요청을 제외한 대화만 넣는다.
+        입력이 잘렸는지 결과에 표시한다. 마지막 요청이 잘렸으면 예측하지 않고 중단한다."""
         from .dataset import DialogueDataset, DialogueCollator
         item = DialogueDataset([{"turns": turns, "final_request": final_request}], tokenizer, max_length)[0]
         if not item["request_mask"]:
@@ -83,7 +83,7 @@ class ModernBertPredictor(nn.Module):
 
     @staticmethod
     def pool_turns(hidden, spans, attention_mask):
-        """prefix sum으로 반개구간 span의 평균을 구한다. padding token은 제외한다."""
+        """각 span의 token 평균을 구한다. padding은 제외하고, span의 끝 index는 포함하지 않는다."""
         if spans.ndim != 3 or spans.shape[-1] != 2 or spans.shape[0] != hidden.shape[0]:
             raise ValueError("Expected spans [batch, turns, 2]")
         start, end = spans.unbind(-1)
@@ -97,7 +97,7 @@ class ModernBertPredictor(nn.Module):
         return (gather(end) - gather(start)) / count.clamp_min(1).unsqueeze(-1), count > 0
 
     def extract_cls(self, input_ids, attention_mask):
-        """마지막 layer의 CLS를 반환한다. 고정된 표현을 뽑을 때는 호출부에서 eval/no_grad를 설정한다."""
+        """마지막 layer의 CLS를 돌려준다. 학습 없이 추출하려면 호출할 때 eval과 no_grad를 사용한다."""
         return self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0]
 
     def forward(self, input_ids, attention_mask, *, turn_spans=None, turn_mask=None,

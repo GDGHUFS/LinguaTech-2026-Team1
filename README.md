@@ -41,7 +41,7 @@ conshift/
 │   ├── labeled/                     # Gold 및 Target Failure Label
 │   └── splits/                      # Train/Validation/ID/OOD 데이터
 ├── prompts/                         # [B] 대화 생성·검증 및 Target 판단 프롬프트
-│   ├── generation.txt               # [B] Qwen의 멀티턴 대화 생성용 프롬프트
+│   ├── generation.txt               # [B] Qwen의 멀티턴 대화 생성용 7-shot 프롬프트
 │   ├── validation.txt               # [B] 생성 대화와 구조화된 규칙의 일치 여부 검증
 │   └── target_decision.txt          # [B] Target LLM의 ALLOW/DENY/CLARIFY 판단
 ├── src/
@@ -72,16 +72,3 @@ conshift/
 ```
 
 각 파일의 자세한 역할은 각 파일 docstring에 있습니다
-
-## [B] 독립 실행 순서
-
-Python 환경에 `requirements.txt`의 의존성과 모델 실행용 `torch`, `transformers`, `numpy`를 설치한다. 로컬 Qwen의 `device_map=auto` 실행에는 `accelerate`도 필요하다. 검증용 임시 환경은 사용 후 삭제한다.
-
-1. `python scripts/01_data_setup.py`로 고정 revision 원본을 받고 정규화한다. 이미 받은 원본은 `--offline`으로 무결성을 검사한다. Source appropriateness는 gold로 복사하지 않는다.
-2. `python scripts/02_prepare.py --endpoint <OpenAI-compatible URL> --model <Qwen ID>`로 CAP01–09 변형, 대화 생성과 의미 검증을 실행한다. endpoint가 없으면 구조 변형만 저장하며 대화와 gold는 미완성이다.
-3. 외부에서 받은 gold annotation을 해당 generated record에 채운다. B는 gold/state/supporting-turn 의미론을 계산하지 않는다. `python scripts/03_label_and_split.py --execute --revision <40자리 commit>`으로 Target 실행·라벨링·group split을 수행한다. Gold가 없으면 Target 실행은 가능하지만 failure label은 null이다. `--execute`가 없으면 Target 실행도 대기 상태다.
-4. 유효한 대화·외부 gold·Target label이 갖춰진 뒤 `python train.py --mode A --seed 42 --split-version <version> --pilot`을 실행한다. C와 C_plus도 같은 split/config/seed로 실행한다. C는 state, C_plus는 실제 supporting-turn annotation이 추가로 필요하다. `--tune`은 각 모드에 같은 trial 수를 부여한다. `--resume <last.pt>`로 동일 조건의 학습을 복원한다. Test/OOD는 선택에 사용하지 않는다. 실측 전 설정은 초기안이며 자동 확정하지 않는다.
-5. B 추론은 `ModernBertPredictor.from_checkpoint(<best.pt>)`로 모델을 복원하고 `model.predict(history_turns, final_request, tokenizer, output_path=...)`를 호출한다. History는 마지막 요청을 제외한다. 학습과 같은 tokenizer와 max_length를 사용한다. 저장 결과는 failure probability와 truncation 여부만 포함하며 gold/Target 실행을 요구하지 않는다. 학습 checkpoint와 별도로 `model.save(path)`로 모델만 내보낼 수도 있다.
-6. 검증은 실제 데이터로 하거나 임시 테스트 스크립트에서 수행한다. 가상 입력·응답을 넣은 테스트와 fixture는 저장소에 남기지 않고 실행 뒤 정리한다. 임시 검증 결과를 실제 pilot 성능으로 보고하지 않는다.
-
-현재 B는 A/C를 직접 import하지 않는다. 외부 annotation 전달과 최종 평가 연결은 사용자 통합 단계에 남겨 둔다.

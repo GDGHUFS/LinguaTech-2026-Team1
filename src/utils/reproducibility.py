@@ -1,4 +1,4 @@
-"""[B] 내용에 따른 JSON hash와 명시적으로 호출하는 random seed 설정을 제공한다."""
+"""[B] 파일과 내용의 hash를 계산하고 random seed를 설정한다."""
 import hashlib
 import json
 import random
@@ -7,17 +7,17 @@ from typing import Any
 
 
 def canonical_json(value: Any) -> str:
-    """같은 데이터, 설정, prompt가 같은 JSON 문자열로 직렬화되도록 한다."""
+    """같은 내용은 항상 같은 JSON 문자열이 되도록 정렬해서 변환한다."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def content_hash(value: Any) -> str:
-    """데이터, 설정 또는 prompt의 내용을 SHA-256으로 식별한다."""
+    """내용을 JSON으로 변환한 뒤 SHA-256 hash를 구한다."""
     return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
 def file_hash(path: str | Path) -> str:
-    """파일 전체를 메모리에 올리지 않고 원본 데이터나 weights의 hash를 계산한다."""
+    """파일을 조금씩 읽으면서 hash를 구한다. 큰 파일도 한꺼번에 메모리에 올리지 않는다."""
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
@@ -26,7 +26,7 @@ def file_hash(path: str | Path) -> str:
 
 
 def seed_everything(seed: int, *, include_torch: bool = False) -> dict[str, Any]:
-    """설치된 runtime의 seed를 맞춘다. torch는 요청한 경우에만 import한다."""
+    """설치된 라이브러리의 seed를 맞춘다. torch는 include_torch가 True일 때만 불러온다."""
     if type(seed) is not int or not 0 <= seed < 2**32:
         raise ValueError("seed must be an integer in [0, 2**32)")
     random.seed(seed)

@@ -1,6 +1,6 @@
-"""[B] A/C/C+를 독립적으로 학습한다. oracle, test evaluation, probing은 실행하지 않는다.
+"""[B] 같은 데이터와 학습 조건으로 A/C/C+를 학습한다.
 
-checkpoint는 신뢰할 수 있는 로컬 파일만 불러온다. 출처를 모르는 pickle은 사용하지 않는다."""
+checkpoint는 신뢰할 수 있는 파일만 불러와야 한다. pickle을 읽는 과정에서 코드가 실행될 수 있다."""
 from __future__ import annotations
 
 import argparse
@@ -32,7 +32,7 @@ def digest(value):
 
 
 def parameter_hash(module):
-    """각 mode를 따로 실행해도 encoder 초기값이 같은지 확인할 hash를 계산한다."""
+    """mode별 encoder 초기값이 같은지 비교할 수 있도록 hash를 구한다."""
     checksum = hashlib.sha256()
     for name, tensor in module.state_dict().items():
         checksum.update(name.encode())
@@ -52,7 +52,7 @@ def seed_everything(seed):
 
 
 def validate_config(config):
-    """batch 크기, optimizer와 학습 budget 설정을 검사한다."""
+    """batch 크기와 optimizer 설정, 최대 학습 횟수를 확인한다."""
     if config["optimizer"] != "AdamW" or config["scheduler"] != "linear":
         raise ValueError("Only AdamW with linear decay is supported")
     if not 1 <= config["max_epochs"] <= 3:
@@ -73,10 +73,11 @@ def validate_config(config):
 
 
 def tuning_plan(mode, config, seed, tune=False):
-    """모드별 trial 수, seed와 step 정책을 맞춘다. A는 같은 control 설정을 반복한다.
+    """각 mode에서 실행할 lambda와 mu 조합을 고른다.
 
-    --tune을 쓰면 각 모델을 seed당 tuning_trials번 실행한다.
-    C+는 lambda와 mu 조합 일부를 재현 가능하게 고른다. test는 읽지 않는다."""
+    --tune을 쓰면 mode마다 같은 seed로 tuning_trials번 학습한다.
+    A는 조정할 보조 loss가 없으므로 같은 설정을 반복한다.
+    C+는 lambda와 mu 조합 중 정해진 수만 고른다. test 데이터는 사용하지 않는다."""
     if mode not in MODES:
         raise ValueError("Unknown mode")
     if not tune:
@@ -94,7 +95,7 @@ def tuning_plan(mode, config, seed, tune=False):
 
 
 def validation_metrics(labels, scores):
-    """checkpoint 선택용 average precision과 Brier를 계산한다. 같은 score는 묶어서 처리한다."""
+    """validation의 average precision과 Brier를 계산한다. 같은 score는 묶어서 계산한다."""
     pairs = [(int(y), float(p)) for y, p in zip(labels, scores) if y != IGNORE_INDEX]
     if not pairs or {y for y, _ in pairs} != {0, 1}:
         raise ValueError("Validation selection requires observed positive and negative failure labels")
@@ -136,7 +137,7 @@ def _counts(batches):
 
 
 def normalized_losses(output, batch, counts):
-    """microbatch 평균을 다시 평균하지 않고 effective batch 전체의 유효 label 수로 나눈다."""
+    """effective batch 전체에서 label이 있는 항목 수를 세어 loss를 나눈다."""
     zero = output["failure_logits"].sum() * 0
     result = dict(failure=zero, state=zero, relevance=zero)
     mask = batch["failure_labels"] != IGNORE_INDEX
@@ -168,7 +169,7 @@ def validate(model, loader, device):
 
 
 def save_checkpoint(path, model, optimizer, scheduler, state, metadata):
-    """모델, optimizer, scheduler와 RNG 상태를 임시 파일에 쓴 뒤 checkpoint를 교체한다."""
+    """모델과 optimizer, scheduler, RNG 상태를 저장한다. 저장이 끝난 뒤 기존 checkpoint를 교체한다."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     rng = {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state(),
@@ -182,7 +183,7 @@ def save_checkpoint(path, model, optimizer, scheduler, state, metadata):
 
 
 def load_checkpoint(path, model, optimizer=None, scheduler=None, expected_metadata=None):
-    """저장한 모델과 학습 상태를 복원한다. resume 조건이 다르면 중단한다."""
+    """checkpoint에서 모델과 학습 상태를 불러온다. 설정이나 데이터가 달라졌으면 resume를 중단한다."""
     payload = torch.load(path, map_location="cpu", weights_only=False)
     if expected_metadata is not None and payload["metadata"] != expected_metadata:
         raise ValueError("Resume metadata mismatch (mode/config/data/revision/seed/budget)")
@@ -218,9 +219,10 @@ def _write_history(path, history, merge=False):
 
 def train_model(model, train_dataset, validation_dataset, collator, config, metadata,
                 output_dir, *, device="cpu", resume=None, stop_after_steps=None, metrics_path=None):
-    """고정된 optimizer budget으로 학습하고 optimizer step 경계에서 복원한다.
+    """정해진 optimizer step 수만큼 학습한다.
 
-    stop_after_steps로 수동 중단할 수 있다. 중단해도 scheduler의 전체 budget은 바뀌지 않는다."""
+    optimizer step을 마친 지점에서 저장하고 resume한다.
+    stop_after_steps로 중단해도 scheduler의 전체 step 수는 바꾸지 않는다."""
     validate_config(config)
     if not len(train_dataset) or not len(validation_dataset):
         raise ValueError("Nonempty train and validation datasets are required")
@@ -313,7 +315,7 @@ def train_model(model, train_dataset, validation_dataset, collator, config, meta
 
 
 def read_training_records(path, partition):
-    """실제 train/validation 데이터만 읽는다. 필요한 gold나 provenance가 없으면 중단한다."""
+    """학습할 train/validation 파일을 읽는다. 필요한 gold나 원본 정보가 없으면 중단한다."""
     if partition not in ("train", "validation") or "test" in Path(path).stem.lower():
         raise ValueError("Only train/validation inputs are allowed")
     records = [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -375,7 +377,7 @@ def main(argv=None):
     tokenizer = load_tokenizer(encoder_config["model_id"], revision=encoder_config["revision"])
     train_dataset = DialogueDataset(train_records, tokenizer, encoder_config["max_length"])
     val_dataset = DialogueDataset(val_records, tokenizer, encoder_config["max_length"])
-    # encoder weights를 받거나 메모리에 올리기 전에 label과 입력을 검사한다.
+    # 큰 weights를 불러오기 전에 입력과 label부터 확인한다.
     train_items = [train_dataset[i] for i in range(len(train_dataset))]
     val_items = [val_dataset[i] for i in range(len(val_dataset))]
     validation_metrics([i["failure_labels"] for i in val_items], [.5] * len(val_items))
@@ -405,7 +407,7 @@ def main(argv=None):
                     "encoder_initialization_hash": parameter_hash(model.encoder),
                     "libraries": {"torch": torch.__version__, "transformers": __import__("transformers").__version__},
                     "input_diagnostics": profile}
-        # head 수가 달라도 sampler와 dropout의 seed 정책이 같도록 초기화 뒤 RNG를 맞춘다.
+        # head 초기화에 쓰인 random 값의 수가 다르므로 학습 직전에 seed를 다시 맞춘다.
         seed_everything(args.seed)
         directory = Path(args.resume).parent if args.resume else Path(args.output_dir) / args.mode / f"seed_{args.seed}" / f"trial_{trial}"
         report = Path("outputs/reports/pilot/pilot_train_metrics.csv") if args.pilot and not args.tune else None
@@ -413,7 +415,7 @@ def main(argv=None):
                             directory, device=args.device, resume=args.resume, metrics_path=report)
         if args.pilot and args.tune:
             report = Path("outputs/reports/pilot/pilot_train_metrics.csv")
-            # 이번 실행의 실제 trial 기록을 모은다. 기존 run의 기록도 보존한다.
+            # 이번 trial의 기록을 더하되, 다른 run의 기록은 지우지 않는다.
             pilot_rows.extend(state["history"])
             _write_history(report, pilot_rows, merge=True)
         if is_better(state["best"], best_trial):

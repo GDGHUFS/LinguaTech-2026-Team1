@@ -1,4 +1,4 @@
-"""[B] 대화를 직렬화하고 token span과 외부 annotation을 학습 입력으로 바꾼다."""
+"""[B] 대화를 모델 입력으로 바꾸고, token span과 학습 label을 준비한다."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ STATE_LABELS = {
 
 
 def load_tokenizer(model_id=MODEL_ID, revision=None, **kwargs):
-    """offset mapping을 지원하는 fast tokenizer를 공통 설정으로 불러온다."""
+    """공통 설정으로 fast tokenizer를 불러온다. turn 위치를 찾는 데 offset mapping을 쓴다."""
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, use_fast=True, **kwargs)
     if not tokenizer.is_fast:
@@ -26,11 +26,11 @@ def load_tokenizer(model_id=MODEL_ID, revision=None, **kwargs):
 
 
 def serialize_dialogue(record):
-    """A/C/C+에 같은 marker와 vocabulary를 사용한다.
+    """대화와 마지막 요청을 하나의 문자열로 만들고 각 부분의 위치를 돌려준다.
 
-    직렬화한 text, history ID, content의 character range와 request range를 반환한다.
-    request_turn_id가 있으면 마지막 turn을 request로 분리한다. 없으면 turns는 history로 본다.
-    Gold, capability metadata와 Target 출력은 입력에 넣지 않는다."""
+    A/C/C+는 같은 marker와 vocabulary를 쓴다. request_turn_id가 있으면
+    해당 turn을 마지막 요청으로 분리한다. 없으면 turns 전체를 이전 대화로 본다.
+    Gold, capability 정보와 Target 응답은 입력에 넣지 않는다."""
     turns = list(record["turns"])
     request = record.get("final_request")
     if request is None:
@@ -71,7 +71,7 @@ def _span(offsets, bounds):
 
 
 def summarize_diagnostics(items):
-    """token length와 evidence 손실을 집계한다. annotation이 없으면 손실 여부는 결측으로 둔다."""
+    """token 수와 truncation, evidence 손실을 집계한다. annotation이 없으면 손실 여부를 알 수 없으므로 None으로 둔다."""
     diagnostics = [item["diagnostics"] for item in items]
     if not diagnostics:
         return {"count": 0, "length_percentiles": {}, "truncation_rate": None,
@@ -90,10 +90,11 @@ def summarize_diagnostics(items):
 
 
 class DialogueDataset(Dataset):
-    """결측 gold는 masking한다. supporting ID만 있으면 positive label만 부여한다.
+    """대화를 token으로 바꾸고 외부 annotation에서 label을 읽는다.
 
-    negative label은 원본 turns에 정렬된 relevance_mask가 있을 때만 사용한다.
-    일부만 남거나 잘린 turn은 무시하며, gold evidence로 입력 window를 고르지 않는다."""
+    supporting ID만 있으면 해당 turn에만 positive label을 붙인다.
+    negative label은 relevance_mask에 명시된 값만 쓴다.
+    잘린 turn은 relevance loss에서 빼고, gold를 보고 입력 범위를 바꾸지는 않는다."""
     def __init__(self, records, tokenizer, max_length=2048, failure_field="failure_label_unsafe"):
         if isinstance(records, (str, Path)):
             records = [json.loads(line) for line in Path(records).read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -163,7 +164,7 @@ class DialogueDataset(Dataset):
 
 
 class DialogueCollator:
-    """서로 다른 길이의 입력과 turn span을 padding해 batch로 묶는다."""
+    """입력 길이와 turn 수를 padding으로 맞춰 batch를 만든다."""
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
 

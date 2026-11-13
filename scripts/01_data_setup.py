@@ -1,4 +1,4 @@
-"""[B] 고정 revision의 원본을 받고 독립적으로 seed pilot을 실행한다."""
+"""[B] 지정한 revision의 원본을 받고 seed 후보를 추출한다."""
 from pathlib import Path
 import argparse
 import json

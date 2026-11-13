@@ -1,4 +1,4 @@
-"""[B] Target 실행 결과와 잠정 group split을 저장한다."""
+"""[B] Target 응답과 failure label을 저장하고 train, validation, ID/OOD로 나눈다."""
 import argparse
 from collections import Counter
 import csv
@@ -33,7 +33,7 @@ def main():
         parser.error('Mock fixture cannot be saved as real pilot data')
     compositions = tuple(tuple(s.strip() for s in c.split(',')) for c in args.ood_composition) if args.ood_composition else DEFAULT_COMPOSITIONS
     templates = tuple(args.ood_template) if args.ood_template else DEFAULT_TEMPLATES
-    # 전체 pool을 먼저 분할(split)하여 pilot limit 때문에 family가 잘리지 않게 한다.
+    # pilot 대상 수를 제한해도 같은 family가 나뉘지 않도록 전체 데이터의 split을 먼저 확인한다.
     split_samples(rows, seed=args.seed, compositions=compositions, templates=templates)
     eligible = []
     for row in rows:
@@ -52,7 +52,7 @@ def main():
     results = []
     output = ROOT/'data/labeled/target_results.jsonl'
     output.parent.mkdir(parents=True, exist_ok=True)
-    # 각 호출 뒤 저장(checkpoint)하여 이후 호출 실패에도 이전 응답을 보존한다.
+    # 다음 호출이 실패해도 받은 응답은 남도록 호출할 때마다 저장한다.
     with output.open('w', encoding='utf-8') as stream:
         for row in rows:
             if runner and row['sample_id'] in selected:
@@ -67,7 +67,7 @@ def main():
             stream.flush()
     split_rows, manifest = split_samples(results, seed=args.seed, compositions=compositions, templates=templates)
     manifest.update(natural_dialogue_count=len(eligible), target_attempted=sum(bool(r['target_attempts']) for r in results))
-    # 파일 전체 hash(manifest hash)는 추가 실행 metadata도 포함한다.
+    # 실행 정보가 추가됐으므로 manifest hash를 다시 계산한다.
     from src.data.labeling import sha
     manifest.pop('manifest_hash')
     manifest['manifest_hash'] = sha(json.dumps(manifest, sort_keys=True))

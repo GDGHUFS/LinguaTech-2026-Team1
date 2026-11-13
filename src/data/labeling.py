@@ -1,4 +1,4 @@
-"""[B] 고정 Target 실행과 외부 gold 기반 라벨(label)을 처리한다."""
+"""[B] Target에 판단을 요청하고, 받은 응답을 외부 gold와 비교해 label을 붙인다."""
 from __future__ import annotations
 
 import hashlib
@@ -15,7 +15,7 @@ def sha(value):
 
 
 def parse_decision(raw):
-    # 중복 키(duplicate key), 설명문, 추가 필드는 JSON 성공으로 인정하지 않는다.
+    # key가 중복되거나 설명, 추가 필드가 섞인 응답은 잘못된 형식으로 처리한다.
     def unique(pairs):
         result = {}
         for key, value in pairs:
@@ -59,12 +59,12 @@ def target_input(sample):
         request = sample['request'].get('text')
     if not isinstance(request, str) or not request.strip() or clean[-1] != {'role': 'user', 'text': request}:
         raise ValueError('Final request must equal the last user turn')
-    # gold, rule ID, operation trace는 Target 입력(input)에서 제외한다.
+    # Target에는 대화와 마지막 요청만 보낸다.
     return {'dialogue': clean, 'final_request': request}
 
 
 class LocalTarget:
-    """실제 가중치 revision과 chat template을 고정하는 로컬 실행기(runner)."""
+    """지정한 revision의 Qwen과 chat template을 불러와 실행한다."""
     def __init__(self, revision):
         if not re.fullmatch(r'[0-9a-f]{40}', revision):
             raise ValueError('Use an immutable 40-character model commit hash')

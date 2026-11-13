@@ -1,9 +1,9 @@
-"""[B] 결정적 구조 검사(schema validation)와 의미 검사 결과를 검증한다."""
+"""[B] 필드와 operation 순서가 맞는지 검사하고, Qwen의 검증 결과를 확인한다."""
 from src.data.capability_matrix import CAPABILITIES
 
 def validate_structure(sample):
     errors = []
-    # 연구 관계(expected relation)는 metadata 일치만 검사하며 참 여부는 판정하지 않는다.
+    # capability에 맞는 expected relation인지 확인한다. 실제로 그 관계가 성립하는지는 여기서 판단하지 않는다.
     cap = sample.get('capability_id')
     if cap is not None:
         if cap not in CAPABILITIES:

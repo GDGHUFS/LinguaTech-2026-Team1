@@ -1,4 +1,4 @@
-"""[B] 연결된 원본 그룹(group)을 묶고 OOD부터 격리한다."""
+"""[B] 같은 원본에서 나온 항목을 함께 묶고, OOD를 먼저 분리한다."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -70,7 +70,7 @@ def split_samples(rows, *, seed=42, ratios=(.7,.15,.15), compositions=DEFAULT_CO
     if len(ids) != len(set(ids)):
         raise ValueError('Duplicate sample_id')
     output = [dict(r) for r in rows]
-    # 순서와 failure 값에 무관한 그룹 정렬(group ordering)을 사용한다.
+    # 입력 순서나 failure label이 달라도 group 배정이 같도록 먼저 정렬한다.
     groups = sorted(connected_groups(rows), key=lambda g: sorted(ids[i] for i in g))
     id_groups = defaultdict(list)
     for group in groups:
@@ -86,7 +86,7 @@ def split_samples(rows, *, seed=42, ratios=(.7,.15,.15), compositions=DEFAULT_CO
     for source in sorted(id_groups):
         groups = id_groups[source]
         rng.shuffle(groups)
-        # 최대 나머지 배분(largest remainder)으로 작은 group 수도 재현 가능하게 나눈다.
+        # 비율대로 나눈 뒤 남는 group은 소수 부분이 큰 split부터 배정한다.
         exact = [len(groups)*r for r in ratios]
         counts = [int(n) for n in exact]
         for k in sorted(range(3), key=lambda k: (-(exact[k]-counts[k]), k))[:len(groups)-sum(counts)]:
