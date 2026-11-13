@@ -109,12 +109,15 @@ class Versions(Contract):
 
 
 class TargetAttempt(Contract):
-    raw_output: str
-    parse_status: Literal["VALID", "INVALID_OUTPUT"]
+    # labeling.run_target는 실행 오류일 때 raw_output 없이 EXECUTION_ERROR를 기록한다.
+    raw_output: str | None
+    parse_status: Literal["VALID", "INVALID_OUTPUT", "EXECUTION_ERROR"]
     decision: Decision | None
 
     @model_validator(mode="after")
     def check_parse(self) -> TargetAttempt:
+        if (self.parse_status == "EXECUTION_ERROR") != (self.raw_output is None):
+            raise ValueError("Only an execution error may omit the raw output")
         if (self.parse_status == "VALID") != (self.decision is not None):
             raise ValueError("Valid output requires a decision; invalid output must have no decision")
         if self.parse_status == "VALID":
@@ -161,10 +164,10 @@ class Sample(Contract):
     target_execution: dict[str, Any] | None = None
     target_attempts: list[TargetAttempt] = Field(default_factory=list, max_length=2)
     target_decision: Decision | None = None
-    parse_status: Literal["NOT_RUN", "VALID", "INVALID_OUTPUT"] = "NOT_RUN"
+    parse_status: Literal["NOT_RUN", "VALID", "INVALID_OUTPUT", "EXECUTION_ERROR"] = "NOT_RUN"
     failure_label_unsafe: Binary | None = None
     failure_label_any: Binary | None = None
-    split: Literal["train", "validation", "id_test", "ood_composition", "ood_template"] | None = None
+    split: Literal["train", "validation", "id_test", "ood_composition", "ood_template", "ood_joint"] | None = None
 
     @model_validator(mode="after")
     def validate_pipeline(self) -> Sample:
