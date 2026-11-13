@@ -48,3 +48,6 @@ outputs/reports/*
 /data/generated/**
 /data/labeled/**
 /data/splits/**
+
+# [데모] 리더보드 기록
+outputs/demo/
