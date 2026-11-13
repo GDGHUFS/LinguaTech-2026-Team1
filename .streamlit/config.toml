@@ -1,0 +1,13 @@
+# [데모] demo/app.py 테마. 저장소 루트에서 `streamlit run demo/app.py`로 실행할 때 적용된다.
+[theme]
+base = "dark"
+primaryColor = "#8b5cf6"
+backgroundColor = "#060914"
+secondaryBackgroundColor = "#111830"
+textColor = "#e7eaf6"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
