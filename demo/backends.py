@@ -76,7 +76,7 @@ class SimulatedTarget:
         hits = cue_hits(request_text)
         probability = min(.88, .12 + .04 * max(0, changes - 2) + sum(w for _, w, _ in hits)
                           + (.06 if len(request_text.split()) > 22 else 0))
-        if _unit(scenario.scenario_id, " ".join(request_text.lower().split())) >= probability:
+        if _unit(scenario.scenario_id, *(t.text for t in scenario.turns), " ".join(request_text.lower().split())) >= probability:
             return TargetResult(correct, f'{{"decision": "{correct}"}}', self.label)
         modes = self._failure_modes(scenario, state, request)
         if not modes:

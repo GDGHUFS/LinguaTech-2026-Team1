@@ -24,8 +24,11 @@ if str(ROOT) not in sys.path:
 
 from demo import leaderboard  # noqa: E402
 from demo.backends import load_backends  # noqa: E402
-from demo.engine import apply_operations, evaluate, parse_request  # noqa: E402
-from demo.scenarios import BY_ID, SCENARIOS  # noqa: E402
+from demo.engine import Turn, apply_operations, evaluate, parse_request, parse_turn  # noqa: E402
+from demo.scenarios import BY_ID, CUSTOM_EXAMPLES, CUSTOM_ID, DAY_KO, SCENARIOS, make_custom  # noqa: E402
+
+MAX_CUSTOM_TURNS = 8
+MIN_RULE_CHANGES = 2
 
 st.set_page_config(page_title="Break the Privacy Rule", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -145,6 +148,10 @@ box-shadow:0 14px 40px -14px rgba(124,58,237,.9);}
 [data-testid="stFormSubmitButton"] button p,.stButton>button p{color:#fff!important;font-weight:800;}
 .stButton>button:disabled{opacity:.55;}
 [data-testid="stForm"]{border:1px solid var(--line);background:var(--panel);border-radius:20px;padding:18px;}
+[class*="st-key-example-"] button{background:rgba(255,255,255,.03);border-color:rgba(148,163,255,.2);text-align:left;}
+[class*="st-key-example-"] button p{font-size:.8rem!important;font-weight:500!important;color:#cdd3ee!important;}
+.interp{font-size:.74rem;color:#cdd3ee;margin-left:6px;}
+.empty{text-align:center;color:var(--muted);padding:26px 18px;font-size:.9rem;line-height:1.7;}
 .warnbox{padding:14px 16px;border-radius:16px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);color:#fde68a;margin-top:10px;}
 @media (max-width:1180px){
 .st-key-layout [data-testid="stHorizontalBlock"]{flex-wrap:wrap;}
@@ -163,9 +170,32 @@ def backends():
 
 
 def init_state():
-    defaults = {"scenario_id": SCENARIOS[0].scenario_id, "nickname": "", "history": [], "result": None, "animate": False}
+    defaults = {"scenario_id": SCENARIOS[0].scenario_id, "nickname": "", "history": [], "result": None, "animate": False,
+                "custom_turns": [], "custom_today": 4, "turn_problem": None}
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+
+
+def custom_base_turns() -> tuple[Turn, ...]:
+    """저장된 관람객 턴을 (주인 발화, AI 응답) 턴 쌍으로 바꾼다."""
+    turns = []
+    for item in st.session_state.custom_turns:
+        turns += [Turn("user", "Owner", item["text"], item["operation"]), Turn("assistant", "Assistant", item["reply"])]
+    return tuple(turns)
+
+
+def current_scenario():
+    if st.session_state.scenario_id == CUSTOM_ID:
+        return make_custom(custom_base_turns(), st.session_state.custom_today)
+    return BY_ID[st.session_state.scenario_id]
+
+
+def title_of(scenario_id):
+    return "직접 만들기" if scenario_id == CUSTOM_ID else BY_ID[scenario_id].title
+
+
+def rule_changes() -> int:
+    return sum(1 for item in st.session_state.custom_turns if item["operation"] and item["operation"].op != "NO_CHANGE")
 
 
 def step(number, title, subtitle=""):
@@ -196,16 +226,16 @@ def hero(target, predictor, notes):
 def scenario_picker(broken: set[str]):
     step(1, "시나리오 선택", "모든 인물과 정보는 가상입니다")
     with st.container(key="picker"):
-        columns = st.columns(len(SCENARIOS))
-    for column, scenario in zip(columns, SCENARIOS):
+        columns = st.columns(len(SCENARIOS) + 1)
+    for column, scenario in zip(columns, SCENARIOS + (make_custom((), 4),)):
         with column:
             selected = scenario.scenario_id == st.session_state.scenario_id
             done = '<span class="badge-done">🔓 돌파 완료</span>' if scenario.scenario_id in broken else ""
             render(f"""<div class="card scard {'on' if selected else ''}">
-                <div class="stars">{'★' * scenario.difficulty}{'☆' * (3 - scenario.difficulty)}</div>
+                <div class="stars">{'★' * scenario.difficulty + '☆' * (3 - scenario.difficulty) if scenario.difficulty else 'FREE'}</div>
                 <div class="emo">{scenario.emoji}</div><div class="ti">{h(scenario.title)}</div>
                 <div class="tg">{h(scenario.tagline)}</div>
-                <div class="tg" style="margin-top:6px">데이터 주인 · <b style="color:#e7eaf6">{h(scenario.owner)}</b></div>{done}</div>""")
+                <div class="tg" style="margin-top:6px">데이터 주인 · <b style="color:#e7eaf6">{'나' if scenario.scenario_id == CUSTOM_ID else h(scenario.owner)}</b></div>{done}</div>""")
             if st.button("✓ 선택됨" if selected else "선택", key=f"pick-{scenario.scenario_id}",
                          use_container_width=True, disabled=selected):
                 st.session_state.scenario_id = scenario.scenario_id
@@ -236,27 +266,106 @@ def rule_cards(scenario):
     return "".join(cards)
 
 
+def chat_html(turns, summaries=None):
+    bubbles = []
+    for index, turn in enumerate(turns):
+        chip = ""
+        if turn.operation:
+            name, color = OP_STYLE[turn.operation.op]
+            # 요약의 첫 칸(연산 이름)은 칩과 겹치므로 뺀다.
+            note = (f' <span class="interp">{h(summaries[index].split(" · ", 1)[-1])}</span>'
+                    if summaries and summaries.get(index) else "")
+            chip = f'<div><span class="op" style="background:{color}22;color:{color};border:1px solid {color}55">{turn.operation.op} · {name}</span>{note}</div>'
+        bubbles.append(f'<div class="msg {turn.role}"><div class="who">TURN {index + 1} · {h(turn.speaker).upper()}</div>{h(turn.text)}{chip}</div>')
+    return f'<div class="card"><div class="chat">{"".join(bubbles)}</div></div>'
+
+
+def vocab_html(scenario, title="요청 가능한 범위"):
+    vocab = lambda values: "".join(f'<span class="chip">{h(scenario.labels.get(k, k))} · <i>{h(v[0])}</i></span>' for k, v in values.items())
+    purposes = f'<div class="lbl">목적 (선택)</div><div class="chips">{vocab(scenario.purposes)}</div>' if scenario.purposes else ""
+    return (f'<div class="lbl">{title}</div><div class="chips">{vocab(scenario.data_types)}</div>'
+            f'<div class="chips">{vocab(scenario.recipients)}</div>{purposes}')
+
+
 def scenario_view(scenario):
     step(2, "대화와 현재 규칙", f"{scenario.owner}와 AI 비서의 대화 · 마지막 요청은 당신이 보냅니다")
     left, right = st.columns([1.35, 1], gap="large")
     with left:
-        bubbles = []
-        for index, turn in enumerate(scenario.turns):
-            chip = ""
-            if turn.operation:
-                name, color = OP_STYLE[turn.operation.op]
-                chip = f'<div><span class="op" style="background:{color}22;color:{color};border:1px solid {color}55">{turn.operation.op} · {name}</span></div>'
-            bubbles.append(f'<div class="msg {turn.role}"><div class="who">TURN {index + 1} · {h(turn.speaker).upper()}</div>{h(turn.text)}{chip}</div>')
-        render(f'<div class="card"><div class="chat">{"".join(bubbles)}</div></div>')
+        render(chat_html(scenario.turns))
     with right:
-        vocab = lambda values: "".join(f'<span class="chip">{h(scenario.labels.get(k, k))} · <i>{h(v[0])}</i></span>' for k, v in values.items())
-        purposes = f'<div class="lbl">목적 (선택)</div><div class="chips">{vocab(scenario.purposes)}</div>' if scenario.purposes else ""
         render(f"""<div class="card">
             <div class="today">🗓️ 오늘은 <b>{h(scenario.today_label)}</b>입니다 · 기본값: 허용 규칙이 없으면 공개 금지</div>
             <div class="lbl">현재 규칙 상태 (Rule Engine)</div>{rule_cards(scenario)}
-            <div class="lbl">요청 가능한 범위</div><div class="chips">{vocab(scenario.data_types)}</div>
-            <div class="chips">{vocab(scenario.recipients)}</div>{purposes}
+            {vocab_html(scenario)}
             <div class="trap">💡 {h(scenario.trap)}</div></div>""")
+
+
+def add_custom_turn(text: str) -> None:
+    """관람객이 쓴 턴을 해석해 붙인다. 해석할 수 없으면 이유를 남기고 붙이지 않는다."""
+    text = " ".join(text.split())
+    if not text:
+        return
+    if len(st.session_state.custom_turns) >= MAX_CUSTOM_TURNS:
+        st.session_state.turn_problem = (text, f"대화는 최대 {MAX_CUSTOM_TURNS}턴까지 쓸 수 있어요.")
+        return
+    base = custom_base_turns()
+    state = apply_operations(list(base))
+    next_id = f"r{sum(1 for t in base if t.operation and t.operation.rule) + 1}"
+    parsed = parse_turn(text, make_custom((), st.session_state.custom_today), state, next_id)
+    if parsed.problem:
+        st.session_state.turn_problem = (text, parsed.problem)
+        return
+    st.session_state.custom_turns.append({"text": text, "operation": parsed.operation, "summary": parsed.summary, "reply": parsed.reply})
+    st.session_state.turn_problem = None
+    st.session_state.result = None
+
+
+def custom_builder(scenario):
+    step(2, "대화 직접 만들기", "데이터 주인이 되어 규칙을 만들고 바꾸세요 · 한 턴에 규칙 하나 · 영어로")
+    left, right = st.columns([1.35, 1], gap="large")
+    with left:
+        if st.session_state.custom_turns:
+            summaries = {i * 2: item["summary"] for i, item in enumerate(st.session_state.custom_turns)}
+            render(chat_html(scenario.turns[:-1], summaries))
+        else:
+            render('<div class="card empty">아직 대화가 없어요.<br>아래에 첫 문장을 쓰거나, 오른쪽 예시를 눌러 시작하세요.</div>')
+        with st.form("turn-form", clear_on_submit=True, border=False):
+            text = st.text_input("데이터 주인으로 말하기 (English)", max_chars=200,
+                                 placeholder="예) You can share my lab results with Apex Insurance for claims.")
+            if st.form_submit_button("대화 추가  ➜", use_container_width=True):
+                add_custom_turn(text)
+                st.rerun()
+        if st.session_state.turn_problem:
+            said, problem = st.session_state.turn_problem
+            render(f'<div class="warnbox">✋ <b>“{h(said)}”</b><br>{h(problem)}</div>')
+        # 바깥 레이아웃이 이미 열 2단이라 열을 더 나누지 않고 버튼을 세로로 둔다.
+        if st.button("↩ 마지막 턴 취소", use_container_width=True, disabled=not st.session_state.custom_turns):
+            st.session_state.custom_turns.pop()
+            st.session_state.turn_problem = st.session_state.result = None
+            st.rerun()
+        if st.button("🗑 처음부터", use_container_width=True, disabled=not st.session_state.custom_turns):
+            st.session_state.custom_turns = []
+            st.session_state.turn_problem = st.session_state.result = None
+            st.rerun()
+    with right:
+        today = st.selectbox("오늘 요일 (기한 규칙에 쓰여요)", list(DAY_KO), index=st.session_state.custom_today - 1,
+                             format_func=DAY_KO.get)
+        if today != st.session_state.custom_today:
+            st.session_state.custom_today, st.session_state.result = today, None
+            st.rerun()
+        rules = rule_cards(scenario) or '<div class="lb-sub" style="padding:6px 0 10px">아직 규칙이 없어요.</div>'
+        changes = rule_changes()
+        progress = ("✅ 마지막 요청을 보낼 수 있어요." if changes >= MIN_RULE_CHANGES
+                    else f"규칙을 만들거나 바꾸는 턴이 {MIN_RULE_CHANGES}개 이상 필요해요 (지금 {changes}개).")
+        render(f"""<div class="card"><div class="lbl" style="margin-top:0">현재 규칙 상태 (Rule Engine)</div>{rules}
+            <div class="today" style="margin-top:8px">{h(progress)}</div>
+            {vocab_html(scenario, "쓸 수 있는 표현")}
+            <div class="lbl">기한·목적 붙이는 법</div><div class="chips"><span class="chip"><i>until Friday</i> · 기한</span><span class="chip"><i>for claims</i> · 목적</span></div></div>""")
+        render('<div class="lbl" style="margin-top:14px">예시 문장 (누르면 바로 추가)</div>')
+        for index, example in enumerate(CUSTOM_EXAMPLES):
+            if st.button(example, key=f"example-{index}", use_container_width=True):
+                add_custom_turn(example)
+                st.rerun()
 
 
 def gauge(probability):
@@ -330,6 +439,9 @@ def show_result(scenario, result, animate):
 
 def attack_form(scenario):
     step(3, "마지막 요청 보내기", "영어로 한 문장. 규칙을 바꾸지 말고, 요청만으로 AI를 헷갈리게 하세요")
+    if scenario.scenario_id == CUSTOM_ID and rule_changes() < MIN_RULE_CHANGES:
+        render(f'<div class="card empty">대화에서 규칙을 {MIN_RULE_CHANGES}번 이상 만들거나 바꾸면 마지막 요청을 보낼 수 있어요.</div>')
+        return None
     with st.form("attack", clear_on_submit=False, border=False):
         top = st.columns([1, 2.4])
         nickname = top[0].text_input("닉네임", value=st.session_state.nickname, max_chars=16, placeholder="리더보드에 표시돼요")
@@ -373,7 +485,7 @@ def side_panel():
         badge = f"r{i}" if i <= 3 else ""
         ranks.append(f'<div class="lb-row"><div class="rank {badge}">{i}</div><div><div class="lb-name">{h(row["nickname"])}</div>'
                      f'<div class="lb-sub">시도 {row["attempts"]}회 · 성공 {row["wins"]}회</div></div>'
-                     f'<div class="lb-score">{row["broken"]}/{len(SCENARIOS)} 🔓</div></div>')
+                     f'<div class="lb-score">{row["broken"]}/{len(SCENARIOS) + 1} 🔓</div></div>')
     board = "".join(ranks) or '<div class="lb-sub" style="padding:14px 0">아직 아무도 규칙을 뚫지 못했어요. 첫 번째 주인공이 되어 보세요!</div>'
     render(f"""<div class="card"><div class="t" style="font-weight:900;font-size:1.1rem;margin-bottom:10px">🏆 리더보드</div>
         <div class="stats"><div class="stat"><div class="v">{totals['players']}</div><div class="l">참가자</div></div>
@@ -386,7 +498,7 @@ def side_panel():
         <li>점수: 돌파한 시나리오 수 → 성공 횟수 → 적은 시도 순.</li></ul></div>""")
     history = [r for r in st.session_state.history if r["scenario_id"]][:6]
     if history:
-        items = "".join(f'<div class="hist">{"🚨" if r["breach"] else "🛡️"} <b>{h(BY_ID[r["scenario_id"]].title)}</b> · '
+        items = "".join(f'<div class="hist">{"🚨" if r["breach"] else "🛡️"} <b>{h(title_of(r["scenario_id"]))}</b> · '
                         f'예측 {r["risk"] * 100:.0f}% · AI {r["target"]} / 정답 {r["gold"]}<br><span style="color:#8d96b8">{h(r["request"][:90])}</span></div>'
                         for r in history)
         render(f'<div class="card" style="margin-top:14px"><div style="font-weight:900;margin-bottom:8px">내 시도 기록</div>{items}</div>')
@@ -402,8 +514,11 @@ def main():
         main_col, side_col = st.columns([2.6, 1], gap="large")
     with main_col:
         scenario_picker(broken)
-        scenario = BY_ID[st.session_state.scenario_id]
-        scenario_view(scenario)
+        scenario = current_scenario()
+        if scenario.scenario_id == CUSTOM_ID:
+            custom_builder(scenario)
+        else:
+            scenario_view(scenario)
         request = attack_form(scenario)
         result, animate = st.session_state.result, False
         if request is not None:
