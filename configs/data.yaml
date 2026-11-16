@@ -1,17 +1,29 @@
 # [B] pilot 실측 전에는 초기 설정으로 사용한다.
 schema_version: 1.0.0
-status: pilot_initial
+status: camber_confaideplus_review_pending
 finalized: null
 paths:
   raw: data/raw
   annotated: data/annotated
-  generated: data/generated
-  labeled: data/labeled
-  splits: data/splits
-sources: [CoPriva, CAMBER]
-source_mix_target: [0.5, 0.5]
+  generated: data/generated/camber_v2
+  labeled: data/labeled/camber_v2
+  splits: data/splits/camber_v2
+canonical_filename: canonical_confaideplus_v2.jsonl
+source_policy_revision: camber-v2
+sources: [CAMBER]
+source_selection:
+  CAMBER: [confaideplus]
+optional_sources:
+  CoPriva: disabled
+  CAMBER_privacylensplus: purpose_mapping_unverified
+source_mix_target: [1.0]
 source_candidates_per_source: [50, 100]
 source_mix_final: null
+modify_subtypes: [authorization, recipient, purpose, data_type]
+capability_support:
+  CAP03: [authorization, recipient, purpose, data_type]
+  CAP04: [secure_portal_channel_exception]
+  CAP09: [missing_recipient]
 language: en
 dialogue_turn_range: [4, 12]
 group_key: group_id
@@ -19,8 +31,8 @@ variant_key: variant_group_id
 split:
   order: [ood_holdout, id_group_split]
   id_ratios: {train: 0.70, validation: 0.15, id_test: 0.15}
-  ood_compositions: null
-  ood_template_families: null
+  ood_compositions: [[REVOKE, REINSTATE, EXCEPTION]]
+  ood_template_families: [b_ood_question_embedding_v1]
   final_manifest_hash: null
   optimize_on_target_failure: false
 missing_label: null
@@ -28,7 +40,7 @@ ignore_index: -100
 allow_mock_in_real_data: false
 capability_plan:
   valid_dialogues_per_capability: [15, 25]
-  source_balance: best_effort_equal
+  source_balance: single_active_source
   rule_alignment_gate: 0.95
   capabilities:
     CAP01: {name: ADD, relation: RECOMPUTE}
@@ -42,11 +54,12 @@ capability_plan:
     CAP09: {name: MISSING_CONTEXT, relation: RECOMPUTE}
   require_decision_flip: false
 seed_setup:
-  screening_version: structural-v1
+  screening_version: evidence-group-v2
+  sampling_unit: independent_upstream_group_one_representative
   # 구조 조건만 검사한다. human review와 외부 gold는 별도로 필요하다.
   candidates_per_source: 100
   random_seed: 42
-  inventory: outputs/reports/pilot/seed_inventory.csv
+  inventory: outputs/reports/camber_v2/seed_inventory.csv
   sources:
     CoPriva:
       repository: hwanchang00/CoPriva
@@ -57,3 +70,8 @@ seed_setup:
       repository: google-parfait/contextual-privacy-and-security
       revision: 62e5d4529d291ff0eb1f8f9565f035e8a8827589
       files: [README.md, LICENSE, camber/confaideplus.csv, camber/privacylensplus.csv]
+
+approvals:
+  source_reviews: null
+  qa_manifest: null
+  freeze_manifest: null

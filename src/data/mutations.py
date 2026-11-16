@@ -5,8 +5,12 @@ from src.data.capability_matrix import CAPABILITIES
 
 SLOTS = ('data_type', 'subject', 'sender', 'recipient', 'purpose')
 
-def make_variants(seed):
-    # 필수 정보가 있는 후보만 사용한다. human review 여부는 바꾸지 않는다.
+def make_variants(seed, modify_fields=('authorization',)):
+    if 'source_evidence' in seed:
+        from src.data.source_policy import generation_blockers
+        if generation_blockers(seed):
+            return []
+    # 필수 정보가 있는 후보만 사용하며 사람의 검수 상태는 그대로 전달한다.
     if seed.get('status') != 'eligible_pending_review' or any(not seed.get(k) for k in SLOTS):
         return []
     if not seed.get('group_id') or not seed.get('source_provenance'):
@@ -26,6 +30,17 @@ def make_variants(seed):
             'evidence_trace': None, 'human_review_status': 'pending', 'variant_id': 'base',
             'parent_variant_id': None, 'capability_id': None, 'expected_gold_relation': None,
             'template_family_id': 'b_pilot_base_v1', 'request_style': 'direct'}
+    for key in ('source_component', 'source_evidence', 'semantic_review', 'consent_assessment',
+                'disclosure_assessment', 'purpose_mapping_status', 'generation_ready', 'expansion',
+                'annotation', 'source_motive', 'disclosure_purpose', 'source_checks', 'adapter_revision'):
+        if key in seed:
+            base[key] = deepcopy(seed[key])
+    base['human_review_status'] = seed.get('human_review_status', 'pending')
+    base['source_facts'] = {k: deepcopy(seed.get(k)) for k in SLOTS + ('consent',)}
+    base['policy_temporal_boundary'] = {
+        'source_history': 'Preserve historical secrecy, recovery and knowledge limits.',
+        'synthetic_policy': 'Explicit later hypothetical policy; never original consent.',
+        'status': 'requires_semantic_validation_and_independent_qa'}
     result = [base]
     for cap, (name, relation) in CAPABILITIES.items():
         v = deepcopy(base)
@@ -36,9 +51,8 @@ def make_variants(seed):
             v['initial_rules'] = []
             op['rule'] = deepcopy(rule)
         elif cap == 'CAP03':
-            # 인물이나 목적을 만들어 넣지 않고 expires_at만 변경한다.
-            op['changes'] = {'expires_at': '2030-01-01T00:00:00Z'}
-            v['request']['request_time'] = '2030-01-02T00:00:00Z'
+            # CAP03은 합성 정책의 authorization 필드를 변경한다.
+            op['changes'] = {'authorization': 'DENY'}
         elif cap == 'CAP04':
             v['initial_rules'][0]['authorization'] = 'DENY'
             op['parent_rule_id'] = rule['rule_id']
@@ -56,4 +70,41 @@ def make_variants(seed):
         if op:
             v['operation_trace'].append(op)
         result.append(v)
+    for field in modify_fields:
+        if field not in ('authorization','recipient','purpose','data_type'):
+            raise ValueError('Unsupported MODIFY subtype')
+        if field == 'authorization':
+            continue
+        v = deepcopy(next(r for r in result if r['capability_id']=='CAP03'))
+        v.update(sample_id=v['sample_id']+'__'+field, variant_id='CAP03_'+field, modification_subtype=field)
+        value = 'synthetic_alternative_' + field
+        v['operation_trace'][0]['changes'] = {field:value}
+        v['transformation_notes'].append('Synthetic scope intervention: '+field+'='+value)
+        result.append(v)
     return result
+
+
+def apply_holdout_plan(variants, pool):
+    """Target label이나 점수와 무관하게 사전 지정한 group별 holdout을 적용한다.
+
+    ID의 기본 설정은 유지한다. holdout group의 대조 variant도 쌍별 검토를 위해 남기되, split 단계에서 OOD 평가 대상에서는 제외한다."""
+    if pool == 'id':
+        return variants
+    if pool not in ('ood_composition','ood_template') or not variants:
+        raise ValueError('Unknown predeclared holdout pool')
+    v = deepcopy(variants[0])
+    rule = v['initial_rules'][0]
+    v.update(sample_id=v['sample_id']+'__'+pool,variant_id=pool,parent_variant_id='base',
+             capability_id=None,expected_gold_relation=None)
+    if pool == 'ood_template':
+        v.update(template_family_id='b_ood_question_embedding_v1',request_style='question_embedding')
+    else:
+        rid = rule['rule_id']
+        v['operation_trace'] = [
+            dict(operation_id='comp_revoke',operation='REVOKE',rule_id=rid),
+            dict(operation_id='comp_reinstate',operation='REINSTATE',rule_id=rid),
+            dict(operation_id='comp_exception',operation='EXCEPTION',rule_id=rid+'_exception',parent_rule_id=rid,
+                 rule=dict(rule,rule_id=rid+'_exception',authorization='DENY',scope={'channel':'secure_portal'}))]
+        v['request']['channel']='secure_portal'
+        v['template_family_id']='b_pilot_composition_v1'
+    return variants+[v]

@@ -6,14 +6,6 @@
 - `main`에는 확정된 버전만 merge할 예정입니다.
 
 ### 브랜치별 역할
-## 작업 방식
-
-- **중요! PR 만드실 때 base를 dev 브랜치로 해주세요!**
--  다른 브랜치 작업에 의존하는 경우에만 해당 브랜치를 base로 지정해도 됩니다.
--  작업 전에는 `dev`의 최신 변경 사항을 가져와 개인 브랜치에 반영해 주세요.
-- `main`에는 확정된 버전만 merge할 예정입니다.
-
-### 브랜치별 역할
 - `main` 브랜치: 확정된 코드를 보관
 - `dev` 브랜치: 미확정된 작업중인 코드를 보관, 개인별 브랜치의 코드를 합칠 때 임시 저장 장소.
 - 개인 브랜치: `식별가능한이름이나별명등-날짜-간단한작업내용` 형식으로 브랜치를 만들어 주시면 감사하겠습니다! (날짜 넣는 이유는 브랜치간 선후관계를 파악하기 쉽게 하기 위해)
@@ -21,6 +13,19 @@
 
 
 ## 담당
+
+현재 기본 소스는 **CAMBER confaideplus**다. CoPriva와 privacylensplus adapter/원본은 보존하지만
+기본 실행에서 제외한다. `configs/data.yaml`의 `source_selection`으로 선택한다.
+기존 혼합 산출물은 보존하며 새 기본 split은 `data/splits/camber_v2/`다.
+[CAMBER revision note](CAMBER_REVISION_NOTES.md)에 변경 파일, 실제 group 100개 pilot 및 blocker를 기록했다.
+현재 270개 구조 적격 group 중 검수 통과·생성 승인 group은 0이다.
+
+`pytest.ini`는 테스트 검색 대상을 `tests`로 지정하고 저장소 루트를 import 경로에 넣는다.
+requirements는 기본 검증(`requirements.txt`), 통계 평가(`requirements-evaluation.txt`),
+모델 학습(`requirements-training.txt`)으로 분리했다. 학습 파일이 평가 파일을, 평가 파일이 기본 파일을
+`-r`로 포함하므로 `pip install -r requirements-training.txt` 하나로 모두 설치된다. 세 파일은 유지한다.
+
+학습은 우선 `--tune` 없이 고정 설정으로 실행하야 함. `--tune`은 필요할 때만 사용하는 선택적 하이퍼파라미터 탐색 기능임.
 - [A]: Rule Engine과 Gold State/Decision 계산
 - [B]: 데이터셋 재구성·생성·라벨링·분할 코드, Predictor와 학습
 - [C]: 실험과 평가. `[각자]`는 각 담당자가 자신의 모듈을 테스트한다는 뜻.
@@ -60,7 +65,7 @@ conshift/
 │   ├── 02_prepare.py                # [B] 대화 생성·검증 / [A] Gold State/Decision 계산
 │   └── 03_label_and_split.py        # [B] Target Failure Label 수집 및 데이터 분할
 ├── train.py                          # [B] Baseline A / ConShift C 학습
-├── train_type_aware.py               # [C, 선택] Transition Type-aware 실험 B
+├── train_type_aware.py               # 공통 학습기 별칭; B_pred 및 B_oracle 진단 지원
 ├── evaluate.py                       # [C] ID/OOD 평가 및 모델 비교
 ├── tests/                            # [각자] 담당 모듈 테스트
 ├── outputs/
@@ -70,5 +75,3 @@ conshift/
 ├── requirements.txt                  # [공통] Python 의존성
 └── README.md                         # [공통] 연구 설명 및 실행 방법
 ```
-
-각 파일의 자세한 역할은 각 파일 docstring에 있습니다

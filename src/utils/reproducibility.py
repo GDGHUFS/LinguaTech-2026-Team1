@@ -1,4 +1,4 @@
-"""[B] 파일과 내용의 hash를 계산하고 random seed를 설정한다."""
+"""[B] 파일과 내용의 hash를 계산하고 난수 seed를 설정한다."""
 import hashlib
 import json
 import random
@@ -23,6 +23,32 @@ def file_hash(path: str | Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return "sha256:" + digest.hexdigest()
+
+
+def runtime_metadata():
+    """현재 실행 환경을 기록한다. 실험 검증 여부를 나타내지는 않는다."""
+    import platform
+    import subprocess
+    from importlib.metadata import version, PackageNotFoundError
+    libraries = {}
+    for name in ('numpy', 'torch', 'transformers', 'scikit-learn', 'PyYAML', 'pydantic'):
+        try:
+            libraries[name] = version(name)
+        except PackageNotFoundError:
+            libraries[name] = None
+    result = subprocess.run(['git','rev-parse','HEAD'], capture_output=True, text=True, check=False)
+    working = subprocess.run(['git','status','--porcelain'], capture_output=True, text=True, check=False)
+    root=Path(__file__).resolve().parents[2]
+    paths=[]
+    for folder in ('src','scripts','configs','prompts'):
+        paths.extend(p for p in (root/folder).rglob('*') if p.is_file() and p.suffix in ('.py','.yaml','.txt','.json'))
+    paths.extend(p for p in root.iterdir() if p.is_file() and (p.suffix=='.py' or p.name.startswith('requirements')))
+    # 소스 파일의 바이트를 포함하므로 주석만 바뀌어도 구현 hash는 달라진다.
+    implementation_hash=content_hash([(p.relative_to(root).as_posix(),file_hash(p)) for p in sorted(set(paths))])
+    return dict(python=platform.python_version(), platform=platform.platform(), processor=platform.processor(),
+                libraries=libraries, git_commit=result.stdout.strip() if result.returncode == 0 else None,
+                git_dirty=bool(working.stdout.strip()) if working.returncode==0 else None,
+                implementation_hash=implementation_hash)
 
 
 def seed_everything(seed: int, *, include_torch: bool = False) -> dict[str, Any]:

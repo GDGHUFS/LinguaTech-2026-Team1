@@ -1,8 +1,6 @@
-"""[B] CoPriva/CAMBER 원본을 읽고 연구에 사용할 항목을 정리한다.
+"""[B] CoPriva/CAMBER 원본에서 후보를 추출하고 제외 사유를 보존한다.
 
-N_total은 원본 항목 수, N_candidate는 추출한 후보 수다.
-N_valid는 필수 정보가 갖춰진 후보 수이며, 검토를 마쳤거나 gold가 있다는 뜻은 아니다.
-제외한 후보도 제외 사유와 함께 남긴다."""
+N_total은 원본 항목 수, N_candidate는 추출한 후보 수, N_valid는 필수 정보가 갖춰진 후보 수다. 구조 적격은 사람 검수나 gold 확정을 뜻하지 않는다."""
 from __future__ import annotations
 
 import ast
@@ -22,7 +20,9 @@ def digest(content: bytes) -> str:
 
 
 def download_source(destination: Path, spec: dict, *, offline: bool = False) -> None:
-    """원본 파일을 내려받고 upstream Git tree의 hash와 비교한다."""
+    """원본 파일을 고정 revision의 Git blob hash와 대조하고 누락·변조된 파일을 내려받는다.
+
+    offline=True이면 로컬 파일만 검사하고 누락·변조 시 ValueError를 발생시킨다. 저장 디렉터리는 생성할 수 있다."""
     destination.mkdir(parents=True, exist_ok=True)
     tree_path = destination / 'upstream_tree.json'
     repo, revision = spec['repository'], spec['revision']
@@ -97,7 +97,7 @@ def base_seed(source, component, record_id, parent, record, relative, file_hash,
 def screen(seed):
     """필수 정보가 있는지 확인한다. 원본 label로 후보를 고르지 않는다."""
     for field in ('data_type', 'subject', 'sender', 'recipient', 'purpose', 'policy_context'):
-        if not seed[field]:
+        if not seed[field] and not (field == 'purpose' and seed.get('source_motive')):
             seed['exclusion_reasons'].append(f'missing_{field}')
     if seed['group_id'] is None:
         seed['exclusion_reasons'].append('missing_upstream_group')
@@ -109,6 +109,7 @@ def screen(seed):
 
 
 def copriva_adapter(document, context_id, index, relative, file_hash, spec):
+    """질문과 주제 정보, 원문 참조를 보존한다. 주제에서 개인정보 범위나 동의를 추정하지 않아 범위 필드는 별도 주석 전까지 비워 둔다."""
     record = document['specific_query_list'][index]
     seed = base_seed('CoPriva', 'specific_query', f'{context_id}:specific_query_list:{index}',
                      context_id, record, relative, file_hash, spec)
@@ -127,6 +128,7 @@ def camber_adapter(record, component, relative, file_hash, spec):
                      record, relative, file_hash, spec)
     seed['source_appropriateness_label'] = record.get('appropriateness_label')
     seed['upstream_example_id'], seed['upstream_example_name'] = original_id, parent
+    seed['expansion'] = {k: record.get(k) for k in ('expansion_type', 'expansion_dimension')}
     if not original_id:
         seed['exclusion_reasons'].append('missing_source_record_id')
     try:
@@ -141,7 +143,13 @@ def camber_adapter(record, component, relative, file_hash, spec):
         context_field = 'transmission_principle'
         seed['review_reasons'].append('transmission_principle_is_not_explicit_purpose_or_permission')
     elif component == 'confaideplus':
-        mapping = {'data_type': 'detail', 'subject': 'subject_agent', 'sender': 'aware_agent', 'recipient': 'oblivious_agent', 'purpose': 'reveal_reason'}
+        mapping = {'data_type': 'detail', 'subject': 'subject_agent', 'sender': 'aware_agent', 'recipient': 'oblivious_agent'}
+        seed['source_motive'] = {'value': text(scenario.get('reveal_reason')),
+            'path': 'scenario.reveal_reason', 'quote': text(scenario.get('reveal_reason')),
+            'status': 'source_field_only'}
+        seed['disclosure_purpose'] = {'value': None, 'status': 'unclear',
+            'reason': 'Source motive does not establish the intended disclosure purpose.'}
+        seed['adapter_revision'] = 'camber-evidence-r3'
         context_field = 'story'
         seed['review_reasons'].append('check_story_question_against_structured_agents')
     else:
@@ -152,6 +160,28 @@ def camber_adapter(record, component, relative, file_hash, spec):
         seed[target] = text(scenario.get(source))
         if seed[target] is not None:
             seed['field_provenance'][target] = f'scenario.{source}'
+    # 원문 인용은 매핑 후보의 근거다. 의미가 검증됐다는 뜻은 아니다.
+    seed['source_evidence'] = {
+        target: {'path': f'scenario.{source}', 'quote': seed[target], 'status': 'pending_review'}
+        for target, source in mapping.items() if seed[target] is not None}
+    seed['source_evidence']['policy_context'] = {
+        'path': f'scenario.{context_field}', 'quote': seed['policy_context'], 'status': 'pending_review'}
+    seed['source_evidence']['relationships'] = {
+        k: scenario.get(k) for k in ('aware_agent_relation', 'oblivious_agent_relation') if k in scenario}
+    seed['consent_assessment'] = {'status': 'pending_review', 'value': None,
+        'reason': 'No structured consent field; narrative requires semantic review.'}
+    seed['disclosure_assessment'] = {'status': 'pending_review', 'value': None,
+        'evidence_path': f'scenario.{context_field}'}
+    seed['purpose_mapping_status'] = 'pending_review'
+    seed['review_reasons'].append('reveal_reason_may_be_motivation_not_disclosure_purpose')
+    # 행위자가 다르게 기술된 경우도 검토할 수 있도록 원본 질문을 그대로 남긴다.
+    if component == 'confaideplus':
+        story = seed['policy_context'] or ''
+        seed['source_question'] = story.partition('Question:')[2].partition('Answer:')[0].strip() or None
+        seed['review_reasons'].append('verify_subject_sender_recipient_against_source_question')
+        from src.data.camber_evidence import assess
+        seed['source_checks'] = assess(seed)
+        seed['exclusion_reasons'].extend(seed['source_checks']['conflicts'])
     seed['review_reasons'].extend(['verify_personal_information_suitability', 'policy_and_consent_require_human_annotation'])
     return screen(seed)
 
@@ -169,6 +199,8 @@ def load_source(raw, source, spec):
     elif source == 'CAMBER':
         for relative in spec['files']:
             if not relative.endswith('.csv'):
+                continue
+            if spec.get('components') is not None and Path(relative).stem not in spec['components']:
                 continue
             path = raw / source / relative
             file_hash = digest(path.read_bytes())
@@ -190,9 +222,9 @@ def load_source(raw, source, spec):
 
 
 def select_candidates(records, count, random_seed):
-    """특정 유형에 몰리지 않도록 component, expansion, context family별로 후보를 고른다.
+    """소스별 층을 순환하며 후보를 고른다. CAMBER는 component·expansion 유형, CoPriva는 원본 ID의 접두사로 층을 나눈다.
 
-    선정 비율은 추출한 후보를 기준으로 계산한다. 제외된 후보를 다른 항목으로 채우지 않는다."""
+    구조 검사에서 제외된 후보도 표본에 남기며 다른 후보로 대체하지 않는다."""
     strata = defaultdict(list)
     for record in records:
         key = (record['source_component'], record['source_record'].get('expansion_type', '')) if record['source_dataset'] == 'CAMBER' else (record['source_seed_id'].split('_')[0].rstrip('0123456789abcd'),)
@@ -208,8 +240,65 @@ def select_candidates(records, count, random_seed):
     return candidates
 
 
+def active_setup(config):
+    """선택한 소스 설정을 반환한다. 선택되지 않은 adapter 설정도 보존한다."""
+    from copy import deepcopy
+    setup = deepcopy(config['seed_setup'])
+    selection = config.get('source_selection')
+    if selection is None:  # source_selection이 없는 이전 설정도 읽을 수 있도록 처리한다.
+        return setup
+    if set(config['sources']) != set(selection):
+        raise ValueError('sources and source_selection disagree')
+    setup['sources'] = {name: setup['sources'][name] for name in selection}
+    for name, components in selection.items():
+        if name == 'CAMBER' and (not components or not set(components) <= {'confaideplus', 'privacylensplus'}):
+            raise ValueError('Explicit supported CAMBER components required')
+        if name == 'CAMBER':
+            setup['sources'][name]['components'] = components
+            setup['sources'][name]['files'] = [p for p in setup['sources'][name]['files']
+                if not p.endswith('.csv') or Path(p).stem in components]
+    return setup
+
+
+def select_group_candidates(records, count, random_seed):
+    """원본 group을 무작위로 고르고 각 group에서 대표 후보 하나를 반환한다.
+
+    no_expansion 전체를 먼저 비교한다. 근거 검사, 정보 범위, actor, 목적 근거,
+    범위 길이와 숫자 ID로 결정한다. label/원하는 gold는 사용하지 않는다.
+    실패 group은 다른 group으로 대체하지 않는다. 정책은 후향적 r3이다."""
+    groups = defaultdict(list)
+    for row in records:
+        if row.get('group_id'):
+            groups[row['group_id']].append(row)
+    keys = sorted(groups)
+    random.Random(random_seed).shuffle(keys)
+    if len(keys) < count:
+        raise ValueError('Insufficient independent upstream groups')
+    from src.data.camber_evidence import representative_key
+    selected = []
+    for key in keys[:count]:
+        pool = [r for r in groups[key] if r['source_record'].get('expansion_type') == 'no_expansion'] or groups[key]
+        selected.append(min(pool, key=representative_key))
+    return selected
+
+
+def screening_summary(records):
+    """adapter 추출 범위를 집계한다. 사람 검수나 생성 승인을 마친 수와는 구분한다."""
+    eligible = [r for r in records if r['status'] == 'eligible_pending_review']
+    return dict(records=len(records), statuses=dict(Counter(r['status'] for r in records)),
+                eligible_pending_review=len(eligible),
+                eligible_upstream_groups=len({r['group_id'] for r in eligible}),
+                exclusion_reasons=dict(Counter(reason for r in records for reason in r['exclusion_reasons'])),
+                exclusion_combinations=dict(Counter('|'.join(r['exclusion_reasons']) or 'NONE' for r in records)),
+                human_reviewed=sum(r['human_review_status'] == 'reviewed' for r in records),
+                generation_ready=sum(r.get('generation_ready') is True for r in records))
+
+
 def run_pilot(raw, canonical_path, inventory_path, setup):
-    if setup['screening_version'] != 'structural-v1':
+    """후보 JSONL과 소스별 CSV 집계를 새 경로에 저장한다. 구조 적격 수를 검수·gold 승인 수와 구분한다."""
+    if canonical_path.exists() or inventory_path.exists() or canonical_path.resolve() == inventory_path.resolve():
+        raise ValueError('Use distinct new canonical/inventory paths; existing artifacts are preserved')
+    if setup['screening_version'] not in ('structural-v1', 'evidence-group-v2', 'evidence-group-v3'):
         raise ValueError('Unsupported screening policy')
     count = setup['candidates_per_source']
     if not isinstance(count, int) or not 50 <= count <= 100:
@@ -219,7 +308,8 @@ def run_pilot(raw, canonical_path, inventory_path, setup):
         records = load_source(raw, source, spec)
         if len(records) < count:
             raise ValueError(f'Insufficient pilot population for {source}')
-        selected = select_candidates(records, count, setup['random_seed'])
+        selector = select_group_candidates if setup['screening_version'] in ('evidence-group-v2', 'evidence-group-v3') else select_candidates
+        selected = selector(records, count, setup['random_seed'])
         valid = sum(seed['status'] == 'eligible_pending_review' for seed in selected)
         summaries.append({'source_dataset': source, 'N_total': len(records), 'N_candidate': len(selected),
                           'N_valid': valid, 'conversion_yield': valid / len(selected),
@@ -230,12 +320,12 @@ def run_pilot(raw, canonical_path, inventory_path, setup):
     canonical_path.parent.mkdir(parents=True, exist_ok=True)
     canonical_path.write_text(''.join(json.dumps(seed, ensure_ascii=False, sort_keys=True) + '\n' for seed in candidates), encoding='utf-8')
     inventory_path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ['row_type', 'source_dataset', 'source_component', 'source_record_id', 'group_id', 'status', 'N_total', 'N_candidate', 'N_valid', 'conversion_yield', 'exclusion_reasons', 'review_reasons', 'human_review_required', 'human_reviewed', 'annotation_agreement', 'gold_verified', 'source_label', 'data_type', 'screening_version', 'sampling_seed', 'revision']
+    fields = ['row_type', 'source_dataset', 'source_component', 'source_record_id', 'group_id', 'status', 'N_total', 'N_candidate', 'N_valid', 'conversion_yield', 'exclusion_reasons', 'review_reasons', 'human_review_required', 'human_reviewed', 'annotation_agreement', 'gold_verified', 'source_label', 'data_type', 'screening_version', 'sampling_seed', 'revision', 'source_file_hash', 'source_record_hash']
     with inventory_path.open('w', encoding='utf-8', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         for summary in summaries:
             writer.writerow({**summary, 'row_type': 'summary', 'exclusion_reasons': json.dumps(summary['exclusion_reasons'], sort_keys=True), 'screening_version': setup['screening_version'], 'sampling_seed': setup['random_seed'], 'revision': setup['sources'][summary['source_dataset']]['revision']})
         for seed in candidates:
-            writer.writerow({**{key: seed[key] for key in ('source_dataset', 'source_component', 'source_record_id', 'group_id', 'status', 'data_type')}, 'row_type': 'candidate', 'exclusion_reasons': json.dumps(seed['exclusion_reasons']), 'review_reasons': json.dumps(seed['review_reasons']), 'human_review_required': True, 'human_reviewed': False, 'gold_verified': False, 'source_label': seed['source_appropriateness_label'], 'screening_version': setup['screening_version'], 'sampling_seed': setup['random_seed'], 'revision': seed['source_provenance']['revision']})
+            writer.writerow({**{key: seed[key] for key in ('source_dataset', 'source_component', 'source_record_id', 'group_id', 'status', 'data_type')}, 'row_type': 'candidate', 'exclusion_reasons': json.dumps(seed['exclusion_reasons']), 'review_reasons': json.dumps(seed['review_reasons']), 'human_review_required': True, 'human_reviewed': False, 'gold_verified': False, 'source_label': seed['source_appropriateness_label'], 'screening_version': setup['screening_version'], 'sampling_seed': setup['random_seed'], 'revision': seed['source_provenance']['revision'], 'source_file_hash':seed['source_provenance']['file_hash'], 'source_record_hash':seed['source_provenance']['record_hash']})
     return summaries

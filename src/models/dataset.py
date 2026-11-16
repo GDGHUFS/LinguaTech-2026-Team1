@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import torch
+from src.data.operations import operation_presence
 from torch.utils.data import Dataset
 
 IGNORE_INDEX = -100
@@ -28,9 +29,9 @@ def load_tokenizer(model_id=MODEL_ID, revision=None, **kwargs):
 def serialize_dialogue(record):
     """대화와 마지막 요청을 하나의 문자열로 만들고 각 부분의 위치를 돌려준다.
 
-    A/C/C+는 같은 marker와 vocabulary를 쓴다. request_turn_id가 있으면
-    해당 turn을 마지막 요청으로 분리한다. 없으면 turns 전체를 이전 대화로 본다.
-    Gold, capability 정보와 Target 응답은 입력에 넣지 않는다."""
+    A/C/C+는 같은 구분자와 어휘를 쓴다. request_turn_id가 있으면 해당 turn을 마지막 요청으로 분리한다. 없으면 turns 전체를 이전 대화로 본다.
+
+    gold, capability 정보와 Target 응답은 입력에 넣지 않는다."""
     turns = list(record["turns"])
     request = record.get("final_request")
     if request is None:
@@ -90,11 +91,9 @@ def summarize_diagnostics(items):
 
 
 class DialogueDataset(Dataset):
-    """대화를 token으로 바꾸고 외부 annotation에서 label을 읽는다.
+    """대화를 token으로 바꾸고 외부 주석에서 학습 label을 읽는다.
 
-    supporting ID만 있으면 해당 turn에만 positive label을 붙인다.
-    negative label은 relevance_mask에 명시된 값만 쓴다.
-    잘린 turn은 relevance loss에서 빼고, gold를 보고 입력 범위를 바꾸지는 않는다."""
+    supporting ID만 있으면 해당 turn에만 양성 label을 붙이고, 음성 label은 relevance_mask에 명시된 값만 사용한다. 잘린 turn은 relevance loss에서 제외하며 gold를 보고 입력 범위를 바꾸지 않는다."""
     def __init__(self, records, tokenizer, max_length=2048, failure_field="failure_label_unsafe"):
         if isinstance(records, (str, Path)):
             records = [json.loads(line) for line in Path(records).read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -136,6 +135,7 @@ class DialogueDataset(Dataset):
                 raise ValueError("Positive relevance must match supporting IDs")
         elif support is not None:
             labels = [1 if i in support else IGNORE_INDEX for i in ids]
+        # 일부만 남은 turn이나 불완전한 요청에는 relevance 감독을 적용하지 않는다.
         labels = [x if ok and request_complete else IGNORE_INDEX for x, ok in zip(labels, visible)]
         state, state_labels = record.get("gold_state") or {}, {}
         for name, classes in STATE_LABELS.items():
@@ -156,6 +156,7 @@ class DialogueDataset(Dataset):
             "request_span": _span(offsets, request_range), "request_mask": request_complete,
             "relevance_labels": labels, "failure_labels": IGNORE_INDEX if failure is None else failure,
             "state_labels": state_labels,
+            "type_labels": operation_presence(record['operation_trace']) if 'operation_trace' in record else [IGNORE_INDEX] * 6,
             "diagnostics": {"sample_id": record.get("sample_id"), "full_token_length": len(full["input_ids"]),
                             "token_length": len(encoded["input_ids"]), "truncated": len(full["input_ids"]) > len(encoded["input_ids"]),
                             "lost_supporting_turn_ids": lost, "evidence_loss": None if lost is None else bool(lost),
@@ -177,6 +178,7 @@ class DialogueCollator:
         batch["request_span"] = torch.tensor([item["request_span"] for item in items], dtype=torch.long)
         batch["request_mask"] = torch.tensor([item["request_mask"] for item in items], dtype=torch.bool)
         batch["failure_labels"] = torch.tensor([item["failure_labels"] for item in items], dtype=torch.float)
+        batch["type_labels"] = torch.tensor([item["type_labels"] for item in items], dtype=torch.float)
         batch["state_labels"] = {name: torch.tensor([item["state_labels"][name] for item in items]) for name in STATE_LABELS}
         batch["diagnostics"] = [item["diagnostics"] for item in items]
         return batch

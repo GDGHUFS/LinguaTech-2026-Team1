@@ -3,7 +3,15 @@ status: pilot_initial
 finalized: null
 optimizer: AdamW
 learning_rate: 2.0e-5
-max_epochs: 3
+max_epochs: 10
+diagnostic_max_epochs: 3
+early_stopping:
+  enabled: true
+  monitor: validation_auprc
+  patience: 3
+  min_delta: 0.0
+  evaluation_frequency: epoch
+  tie_break_resets_patience: false
 per_device_batch_size: 8
 gradient_accumulation_steps: 2
 world_size: 1
@@ -11,14 +19,19 @@ effective_batch_size: 16
 weight_decay: 0.01
 scheduler: linear
 scheduler_status: implementation_initial_pending_pilot
-seeds: [42, 43, 44]
+seeds: [42]
+experiment_mode: single_seed
 seed_values_status: implementation_initial
 lambda_state: 0.5
 mu_relevance: 0.2
+nu_type: 0.5
+nu_candidates: [0.25, 0.5, 1.0]
 lambda_candidates: [0.25, 0.5, 1.0]
 mu_candidates: [0.1, 0.2, 0.5]
 models:
   A: {failure: true, state: false, relevance: false}
+  B_pred: {failure: true, state: false, relevance: false, type: true}
+  B_oracle: {failure: true, state: false, relevance: false, diagnostic_only: true}
   C: {failure: true, state: true, relevance: false}
   C_plus: {failure: true, state: true, relevance: true}
 state_loss: masked_mean_per_head
@@ -29,7 +42,7 @@ max_grad_norm: 1.0
 max_optimizer_steps: null
 checkpoint_every_steps: null
 tuning_trials: 3
-tuning_policy: equal_full_runs_per_mode_per_seed
+tuning_policy: up_to_budget_unique_effective_settings_per_mode_per_seed
 tuning_seed_policy: same_seed_for_all_trials_and_modes
 validation_auprc_definition: average_precision_grouped_score_ties
 missing_validation_class: stop_selection

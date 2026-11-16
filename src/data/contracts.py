@@ -1,7 +1,6 @@
 """[B] 데이터 준비와 학습에 사용할 필드와 값의 범위를 정한다."""
 from __future__ import annotations
 
-import json
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -75,6 +74,10 @@ class Request(Contract):
     data_type: NonEmpty | None = None
     recipient: NonEmpty | None = None
     purpose: NonEmpty | None = None
+    subject: NonEmpty | None = None
+    sender: NonEmpty | None = None
+    scope: dict[str, Any] = Field(default_factory=dict)
+    request_time: NonEmpty | None = None
 
 
 class GoldState(Contract):
@@ -109,20 +112,28 @@ class Versions(Contract):
 
 
 class TargetAttempt(Contract):
-    raw_output: str
-    parse_status: Literal["VALID", "INVALID_OUTPUT"]
+    raw_output: str | None
+    parse_status: Literal["VALID", "INVALID_OUTPUT", "EXECUTION_ERROR"]
     decision: Decision | None
+    attempt: Annotated[StrictInt, Field(ge=1, le=2)] | None = None
+    latency_seconds: Annotated[float, Field(ge=0)] | None = None
+    error_type: NonEmpty | None = None
+    oom: bool = False
 
     @model_validator(mode="after")
     def check_parse(self) -> TargetAttempt:
+        if self.raw_output is None and self.parse_status != 'EXECUTION_ERROR':
+            raise ValueError('Only execution errors may have no raw output')
         if (self.parse_status == "VALID") != (self.decision is not None):
             raise ValueError("Valid output requires a decision; invalid output must have no decision")
         if self.parse_status == "VALID":
-            if json.loads(self.raw_output) != {"decision": self.decision.value}:
+            from src.data.labeling import parse_decision
+            if parse_decision(self.raw_output) != self.decision.value:
                 raise ValueError("Raw output must match the parsed decision JSON")
         return self
 
 
+# 단계별 필수 주석과 관측 응답을 검증한다. 생성·검증의 부가 기록은 전달용 record에 보존한다.
 class Sample(Contract):
     sample_id: NonEmpty
     source_dataset: Literal["CoPriva", "CAMBER"]
@@ -133,12 +144,17 @@ class Sample(Contract):
     variant_group_id: NonEmpty
     variant_id: NonEmpty
     parent_variant_id: NonEmpty | None
-    data_kind: Literal["real_derived"]
+    data_kind: Literal["real_derived", "real_derived_unlabeled", "mock"]
     source_provenance: dict[str, Any]
+    annotation: dict[str, Any] | None = None
+    source_motive: dict[str, Any] | None = None
+    disclosure_purpose: dict[str, Any] | None = None
+    source_checks: dict[str, Any] | None = None
+    policy_temporal_boundary: dict[str, Any] | None = None
     transformation_notes: list[NonEmpty]
-    capability_id: Capability
+    capability_id: Capability | None
     template_family_id: NonEmpty
-    expected_gold_relation: Literal["INVARIANT", "DECISION_CHANGE", "STATE_CHANGE", "RECOMPUTE"]
+    expected_gold_relation: Literal["INVARIANT", "DECISION_CHANGE", "STATE_CHANGE", "RECOMPUTE"] | None
     language: NonEmpty
     stage: Literal["prepared", "gold", "target", "split"]
     turns: list[Turn] = Field(min_length=1)
@@ -148,6 +164,8 @@ class Sample(Contract):
     operation_trace: list[dict[str, Any]]
     versions: Versions
     engine_version: NonEmpty | None = None
+    annotation_status: Literal['VALID', 'INVALID'] | None = None
+    ambiguity_flags: dict[str, Any] = Field(default_factory=dict)
     gold_decision: Decision | None = None
     gold_state: GoldState | None = None
     supporting_rule_ids: list[NonEmpty] | None = None
@@ -161,13 +179,17 @@ class Sample(Contract):
     target_execution: dict[str, Any] | None = None
     target_attempts: list[TargetAttempt] = Field(default_factory=list, max_length=2)
     target_decision: Decision | None = None
-    parse_status: Literal["NOT_RUN", "VALID", "INVALID_OUTPUT"] = "NOT_RUN"
+    parse_status: Literal["NOT_RUN", "VALID", "INVALID_OUTPUT", "EXECUTION_ERROR"] = "NOT_RUN"
     failure_label_unsafe: Binary | None = None
     failure_label_any: Binary | None = None
-    split: Literal["train", "validation", "id_test", "ood_composition", "ood_template"] | None = None
+    split: Literal["train", "validation", "id_test", "ood_composition", "ood_template", "ood_joint"] | None = None
 
     @model_validator(mode="after")
     def validate_pipeline(self) -> Sample:
+        from src.rules.schema import validate_trace_priorities
+        validate_trace_priorities(self.initial_rules, self.operation_trace)
+        if self.annotation_status == 'INVALID' or self.ambiguity_flags.get('unresolved_conflict'):
+            raise ValueError('Invalid policy conflicts cannot enter predictor samples')
         ids = [turn.turn_id for turn in self.turns]
         if ids != sorted(set(ids)) or ids[-1] != self.request_turn_id:
             raise ValueError("Turn IDs must be unique and ordered, with the final request last")
@@ -231,11 +253,60 @@ def make_group_id(source_dataset: str, source_seed_id: str) -> str:
     return f"{source_dataset}:{source_seed_id}"
 
 
+def validate_pipeline_record(record: dict, *, stage: str | None = None) -> Sample:
+    """전달용 record를 엄격한 Sample 계약으로 투영해 검증한다.
+
+    생성·검증 기록은 원본에 남기며, 실제 원본 record hash가 필요하다. 합성 입력은 data_kind=mock으로 명시하고 산출물을 tests 내부에 저장해야 한다."""
+    from src.data.oracle_adapter import canonical_request
+    from src.rules.engine import evaluate_policy
+    from src.rules.schema import ENGINE_VERSION
+    if stage is None:
+        stage = 'split' if record.get('split') is not None else 'target' if record.get('parse_status','NOT_RUN') != 'NOT_RUN' else 'gold'
+    if record.get('source_provenance',{}).get('fixture') and record.get('data_kind') != 'mock':
+        raise ValueError('Synthetic fixture must be explicitly marked mock')
+    versions = dict(record.get('versions') or {})
+    versions['source_record_hash'] = record.get('source_provenance',{}).get('record_hash') or versions.get('source_record_hash')
+    if record.get('target_protocol_version'):
+        versions.update(target_protocol_version=record['target_protocol_version'],
+            target_version=(record.get('target_execution') or {}).get('model_revision'),label_version='unsafe-any-v1')
+    if record.get('split_manifest_hash'):
+        versions['split_manifest_hash']=record['split_manifest_hash']
+    request = canonical_request(record['request'])
+    request['text'] = record.get('final_request') or (record.get('dialogue') or {}).get('final_request') or record['request'].get('text')
+    payload={key:record[key] for key in Sample.model_fields if key in record}
+    payload.update(stage=stage, request=request,versions=versions,
+        scenario_id=record.get('scenario_id') or record['group_id'],language=record.get('language','en'))
+    sample=Sample.model_validate(payload)
+    if stage != 'prepared':
+        if sample.oracle_verified is not True or sample.engine_version != ENGINE_VERSION:
+            raise ValueError('Production gold contract requires the current verified A oracle')
+        events=sample.operation_trace
+        ids=[e.get('event_id') for e in events]
+        turns=[e.get('effective_turn') for e in events]
+        history={t.turn_id for t in sample.turns[:-1]}
+        initial_ids=[r.get('rule_id') for r in sample.initial_rules]
+        if any(not isinstance(i,str) or not i for i in initial_ids) or len(initial_ids)!=len(set(initial_ids)):
+            raise ValueError('Unique nonempty initial rule IDs required')
+        if any(type(r.get('effective_turn')) is not int or r['effective_turn'] not in history for r in sample.initial_rules):
+            raise ValueError('Initial rule chronology must reference actual history turns')
+        from src.data.operations import OPERATION_CLASSES
+        if any(e.get('op') not in OPERATION_CLASSES for e in events):
+            raise ValueError('Stored operation names must be canonical (UPDATE is boundary-only)')
+        if any(not isinstance(i,str) or not i for i in ids) or len(ids)!=len(set(ids)):
+            raise ValueError('Unique nonempty operation event IDs required')
+        if any(type(t) is not int or t not in history for t in turns) or turns != sorted(turns):
+            raise ValueError('Operation chronology must reference actual history turns')
+        actual=evaluate_policy(sample.initial_rules,events,canonical_request(record['request']),sample.request_turn_id,ENGINE_VERSION)
+        if actual['annotation_status']!='VALID' or any(actual[k]!=record.get(k) for k in ('gold_decision','gold_state','supporting_turn_ids')):
+            raise ValueError('Gold/state/relevant-turn annotations disagree with the current A oracle')
+    return sample
+
+
 def failure_labels(gold: Decision | None, target: Decision | None) -> tuple[int | None, int | None]:
-    """gold와 Target decision을 비교해 unsafe와 any-error label을 계산한다."""
-    if gold is None or target is None:
-        return None, None
-    return int(gold == Decision.DENY and target == Decision.ALLOW), int(gold != target)
+    """기존 tuple 반환 형식을 유지하고 label 계산은 labeling 모듈에 위임한다."""
+    from src.data.labeling import failure_labels as map_labels
+    labels = map_labels(gold, target)
+    return labels['failure_label_unsafe'], labels['failure_label_any']
 
 
 def sample_hash(sample: Sample) -> str:

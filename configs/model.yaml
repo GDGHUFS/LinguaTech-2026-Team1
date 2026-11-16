@@ -16,10 +16,18 @@ encoder:
   added_special_tokens: []
   span_convention: half_open_content_tokens
 predictor:
-  variants: [A, C, C+]
+  variants: [A, B_pred, B_oracle, C, C+]
+  operation_classes: [ADD, MODIFY, REVOKE, EXCEPTION, REINSTATE, NO_CHANGE]
+  type_conditioning: sigmoid_predicted_probabilities
   dropout: 0.1
   failure_label: failure_label_unsafe
   failure_input: last_layer_cls_only
+  failure_input_by_variant:
+    A: last_layer_cls
+    B_pred: concat_cls_sigmoid_predicted_type_probabilities
+    B_oracle: concat_cls_gold_type_diagnostic_only
+    C: last_layer_cls
+    C+: last_layer_cls
   state_classes:
     authorization: [ALLOW, DENY, UNRESOLVED]
     rule_status: [ACTIVE, REVOKED, EXPIRED, NONE]
@@ -53,4 +61,5 @@ target:
 generation:
   model_id: null
   prompt_version: null
-  shot_count: 0
+  shot_count: 7
+  shots: prompts/naturalization_shots.json

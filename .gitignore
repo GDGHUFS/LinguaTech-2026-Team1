@@ -48,3 +48,4 @@ outputs/reports/*
 /data/generated/**
 /data/labeled/**
 /data/splits/**
+/outputs/baselines/**
