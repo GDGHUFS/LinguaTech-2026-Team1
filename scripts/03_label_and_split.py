@@ -1,6 +1,7 @@
 """[B] Target 응답과 failure label을 저장하고 train, validation, ID/OOD로 나눈다."""
 import argparse
 from collections import Counter
+from collections import defaultdict
 import csv
 import json
 from pathlib import Path
@@ -10,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from src.data.labeling import LocalTarget, failure_labels, run_target, target_input
 from src.data.splitting import DEFAULT_COMPOSITIONS, DEFAULT_TEMPLATES, split_samples
+from src.data.batch import read_items, warning
 
 
 def main():
@@ -39,19 +41,44 @@ def main():
     args.report = args.report or ROOT/Path(config['seed_setup']['inventory']).parent/'target_pilot.csv'
     if args.seed != 42:
         parser.error("This experiment registers only random seed 42")
-    if args.labeled_output.exists() or args.report.exists() or any(args.splits_dir.glob('*.json*')):
+    error_path = args.report.with_suffix('.errors.jsonl')
+    if args.labeled_output.exists() or args.report.exists() or error_path.exists() or any(args.splits_dir.glob('*.json*')):
         parser.error('Existing labels/splits/reports are preserved; choose new output paths')
     if not args.full_run and not 100 <= args.limit <= 200:
         parser.error('Pilot limit must be 100-200')
     if args.execute and not args.revision:
         parser.error('--execute requires --revision')
-    rows = [json.loads(l) for l in args.input.read_text(encoding='utf-8-sig').splitlines() if l.strip()]
+    failures = []
+    rows = read_items(args.input, failures, required=('sample_id', 'group_id', 'variant_group_id'))
+    def save_failures():
+        error_path.parent.mkdir(parents=True, exist_ok=True)
+        error_path.write_text(''.join(json.dumps(x, ensure_ascii=False)+'\n' for x in failures), encoding='utf-8')
+    save_failures()
     if not rows:
         parser.error('Empty input; no output written')
-    if any(not selected_source(r, config) for r in rows):
-        parser.error('Input contains a disabled source/component')
     from src.data.source_policy import enforce_source_policy
     from src.data.approvals import enforce_execution
+    families = defaultdict(list)
+    for row in rows:
+        families[row['variant_group_id']].append(row)
+    rows = []
+    for identity, family in families.items():
+        try:
+            if any(not selected_source(r, config) or r.get('data_kind') == 'mock' or
+                   r.get('source_provenance', {}).get('fixture') for r in family):
+                raise ValueError('Disabled or fixture source')
+            enforce_execution(family, mode=args.execution_mode, qa_path=args.qa_manifest,
+                              freeze_path=args.freeze_manifest, data_config=args.config, config_paths=[args.config])
+        except Exception as exc:
+            finding = dict(variant_group_id=identity, sample_ids=[r['sample_id'] for r in family],
+                           status='excluded', reason='input_validation:'+type(exc).__name__)
+            failures.append(finding)
+            warning('input_validation', identity, finding['reason'])
+            save_failures()
+            continue
+        rows.extend(family)
+    if not rows:
+        parser.error('No valid families remain; see '+str(error_path))
     enforce_execution(rows, mode=args.execution_mode, qa_path=args.qa_manifest, freeze_path=args.freeze_manifest, data_config=args.config, config_paths=[args.config])
     if any(r.get('data_kind') == 'mock' or r.get('source_provenance',{}).get('fixture') for r in rows):
         parser.error('Mock fixture cannot be saved as real pilot data')
@@ -72,8 +99,8 @@ def main():
             validate_pipeline_record(row,stage='gold')
             target_input(row)
             eligible.append(row['sample_id'])
-        except ValueError:
-            pass
+        except Exception as exc:
+            warning('target_eligibility', row['sample_id'], type(exc).__name__)
     selected = set(eligible if args.full_run else sorted(eligible)[:args.limit])
     if args.execute and not selected:
         parser.error('No natural-language dialogue available; run generation first')
@@ -86,8 +113,18 @@ def main():
     with output.open('w', encoding='utf-8') as stream:
         for row in rows:
             if runner and row['sample_id'] in selected:
-                result = run_target(row, runner, template)
-                validate_pipeline_record(result,stage='target')
+                try:
+                    result = run_target(row, runner, template)
+                    validate_pipeline_record(result,stage='target')
+                except Exception as exc:
+                    finding = dict(sample_id=row['sample_id'], status='excluded',
+                                   reason='target:'+type(exc).__name__)
+                    failures.append(finding)
+                    warning('target', row['sample_id'], finding['reason'])
+                    save_failures()
+                    continue
+                if result['parse_status'] != 'VALID':
+                    warning('target', row['sample_id'], result['parse_status'])
             else:
                 result = dict(row, target_attempts=[], target_decision=None, parse_status='NOT_RUN',
                     target_error=None, latency_seconds=None, research_dataset_status='unlabeled_target_only',
@@ -96,6 +133,8 @@ def main():
             results.append(result)
             stream.write(json.dumps(result, ensure_ascii=False)+'\n')
             stream.flush()
+    if not results:
+        parser.error('No Target records remain; see '+str(error_path))
     split_rows, manifest = split_samples(results, seed=args.seed, compositions=compositions, templates=templates, fewshot_templates=fewshot_templates, ratios=tuple(config['split']['id_ratios'][k] for k in ('train','validation','id_test')))
     manifest.update(natural_dialogue_count=len(eligible), target_attempted=sum(bool(r['target_attempts']) for r in results),
         source_selection=config.get('source_selection'), source_policy_revision=config.get('source_policy_revision'))

@@ -26,6 +26,8 @@
 
 seed 42, max_epochs 10, patience 3, AdamW, batch 8 × accumulation 2가 기본이다. 이 문서는 브랜치의 코드·config·prompt와 실행 시 생성하는 산출물만 사용한다.
 
+개별 입력 JSONL 형식, 원문 정규화, 모델 호출, 구조·의미·oracle 검증 오류는 WARNING을 터미널에 출력하고 해당 항목을 제외한 뒤 나머지를 계속 처리한다. 생성 실패와 검증 오류는 generation audit와 원본 생성 결과에, 원문 제외는 `.source.jsonl`에, Target 입력/처리 예외는 report와 같은 이름의 `.errors.jsonl`에 남긴다. 비교 family의 일부가 생성·검증에 실패하면 그 family는 최종 데이터에서 제외한다. Target 형식/실행 오류는 null label로 기록하고 다음 항목을 처리한다. 사용할 항목이 전혀 없거나 공통 설정·모델 로딩·저장 장치에 문제가 있으면 해당 단계는 중단하며, 최종 데이터의 클래스·누수·freeze 검증은 유지한다.
+
 ## 3. 서버 환경 준비
 
 관리자가 NVIDIA driver, Python 3.11 + venv, curl을 준비해야 한다. RAM 64GB 이상, 여유 디스크 100GB 이상은 운영 권장치다. 인터넷은 최초 패키지/모델/원본 다운로드에 필요하며 유료 외부 추론 API는 필요 없다.
@@ -175,7 +177,7 @@ python scripts/02_prepare.py --input "$R/canonical.jsonl" \
   --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B --revision "$GEN_REV" \
   --limit-seeds 2 --execution-mode pilot \
   --output "$R/smoke-generated.jsonl" --audit "$R/smoke-generation-audit.csv" \
-  | tee "$R/logs/generation-smoke.txt"
+  2>&1 | tee "$R/logs/generation-smoke.txt"
 ```
 
 smoke audit의 오류와 `semantic_complete_oracle_verified` family 비율을 확인한 뒤 전체 canonical group을 생성한다. smoke는 처리량 측정이며 최종 데이터에 합치지 않는다. 아래는 limit을 canonical 수로 주므로 묵시적 20개 제한을 피한다.
@@ -186,7 +188,7 @@ python scripts/02_prepare.py --input "$R/canonical.jsonl" \
   --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B --revision "$GEN_REV" \
   --limit-seeds "$N_SOURCES" --execution-mode final \
   --output "$R/generated-all.jsonl" --audit "$R/generation-audit.csv" \
-  | tee "$R/logs/generation.txt"
+  2>&1 | tee "$R/logs/generation.txt"
 kill "$SERVE_PID"
 wait "$SERVE_PID" || true
 unset QWEN_API_KEY
@@ -226,7 +228,7 @@ Qwen 의미 검사, CAP별 인용 근거, oracle gold/support 재계산을 통�
 python scripts/03_label_and_split.py --input "$R/generated.jsonl" \
   --revision "$TARGET_REV" --execute --limit 200 --execution-mode pilot \
   --labeled-output "$R/pilot-target.jsonl" --splits-dir "$R/pilot-splits" \
-  --report "$R/pilot-target.csv" | tee "$R/logs/target-pilot.txt"
+  --report "$R/pilot-target.csv" 2>&1 | tee "$R/logs/target-pilot.txt"
 ```
 
 pilot에서 attempted 최소 100, JSON valid rate, 첫 응답 valid rate, OOM/latency, max_new_tokens 64 충분 여부를 확인한다. pilot subset은 eligible sample_id 정렬 앞 200개라 모든 partition을 대표하지 않을 수 있다. 본 실험은 아래 전체 라벨로 별도 생성한다. freeze 전 전체 데이터 준비 단계이므로 execution-mode는 pilot을 유지한다.
@@ -235,7 +237,7 @@ pilot에서 attempted 최소 100, JSON valid rate, 첫 응답 valid rate, OOM/la
 python scripts/03_label_and_split.py --input "$R/generated.jsonl" \
   --revision "$TARGET_REV" --execute --full-run --execution-mode pilot \
   --labeled-output "$R/target-all.jsonl" --splits-dir "$R/splits" \
-  --report "$R/target-all.csv" | tee "$R/logs/target-all.txt"
+  --report "$R/target-all.csv" 2>&1 | tee "$R/logs/target-all.txt"
 python - <<'PY'
 import os,json
 from pathlib import Path

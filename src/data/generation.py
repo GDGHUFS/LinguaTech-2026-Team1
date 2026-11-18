@@ -106,6 +106,21 @@ def naturalization_input(sample):
 
 
 def execute(sample, client, prompt_dir):
+    """Record any item-level failure, including structure validation errors."""
+    from src.data.batch import warning
+    try:
+        record = _execute(sample, client, prompt_dir)
+    except Exception as exc:
+        record = dict(sample, structured_trace=deepcopy(sample), turns=None,
+                      generation_status='failed', validation_status='failed',
+                      generation_raw=None, validation_raw=None,
+                      errors=['execution:'+type(exc).__name__])
+    if record.get('errors'):
+        warning('generation', sample.get('sample_id'), record['errors'])
+    return record
+
+
+def _execute(sample, client, prompt_dir):
     """구조 oracle을 확인한 뒤 대화 생성과 의미 검증을 요청하고 결과를 반환한다.
 
     client가 없으면 구조 검사까지만 수행한다. 생성·검증 중 오류는 상태와 오류 종류로 기록하며 사람의 검수 승인을 대신하지 않는다."""

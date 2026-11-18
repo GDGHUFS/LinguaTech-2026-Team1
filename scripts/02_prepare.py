@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from src.data.mutations import make_variants, apply_holdout_plan
 from src.data.generation import QwenClient, execute, validate_controlled_family
+from src.data.batch import read_items, warning
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -54,9 +55,20 @@ def main():
             client.verify_revision()
         except ValueError as exc:
             parser.error(str(exc))
-    seeds = [json.loads(line) for line in args.input.read_text(encoding='utf-8-sig').splitlines() if line.strip()]
-    if any(not selected_source(s, config) for s in seeds):
-        parser.error('Input contains a disabled source/component; select it explicitly in config')
+    source_audit = []
+    seeds = read_items(args.input, source_audit, required=('seed_id', 'group_id'))
+    enabled = []
+    for seed in seeds:
+        try:
+            if not selected_source(seed, config):
+                raise ValueError('Disabled source')
+        except Exception as exc:
+            finding = dict(seed_id=seed['seed_id'], status='excluded', reason='source_selection:'+type(exc).__name__)
+            source_audit.append(finding)
+            warning('source', seed['seed_id'], finding['reason'])
+            continue
+        enabled.append(seed)
+    seeds = enabled
     args.annotations = args.annotations or (Path(config['approvals']['annotation_revisions']) if not automatic and config.get('approvals',{}).get('annotation_revisions') else None)
     if args.annotations:
         from src.data.annotations import apply_revisions
@@ -78,7 +90,6 @@ def main():
         parser.error('Final generation requires complete predeclared group holdout plan')
     selected = []
     scenario_errors = []
-    source_audit = []
     if automatic:
         # Select by stable IDs before model output; never select using Target labels.
         seeds = sorted(seeds, key=lambda s: s['seed_id'])
@@ -96,24 +107,33 @@ def main():
                            'status':'excluded', **exc.audit}
                 source_audit.append(finding)
                 scenario_errors.append(finding)
+                warning('normalization', seed['seed_id'], finding['reason'])
                 continue
             except Exception as exc:
                 finding = dict(seed_id=seed['seed_id'], status='excluded', reason='normalization:'+type(exc).__name__)
                 source_audit.append(finding)
                 scenario_errors.append(finding)
+                warning('normalization', seed['seed_id'], finding['reason'])
                 continue
-        if generation_blockers(seed):
-            continue
-        from src.data.source_policy import enforce_source_policy
-        enforce_source_policy([seed], args.config)
-        variants = make_variants(seed, config.get('modify_subtypes', ['authorization']))
-        if variants:
-            variants = apply_holdout_plan(variants, holdout_plan.get(seed['group_id'],'id'))
-            from src.utils.reproducibility import content_hash
-            for variant in variants:
-                variant['holdout_plan_hash'] = content_hash(holdout_plan)
-                variant['holdout_plan'] = holdout_plan
-            selected.append(variants)
+        try:
+            blockers = generation_blockers(seed)
+            if blockers:
+                raise ValueError('Seed validation failed')
+            from src.data.source_policy import enforce_source_policy
+            enforce_source_policy([seed], args.config)
+            variants = make_variants(seed, config.get('modify_subtypes', ['authorization']))
+            if variants:
+                variants = apply_holdout_plan(variants, holdout_plan.get(seed['group_id'],'id'))
+                from src.utils.reproducibility import content_hash
+                for variant in variants:
+                    variant['holdout_plan_hash'] = content_hash(holdout_plan)
+                    variant['holdout_plan'] = holdout_plan
+                selected.append(variants)
+        except Exception as exc:
+            finding = dict(seed_id=seed['seed_id'], status='excluded', reason='preparation:'+type(exc).__name__)
+            source_audit.append(finding)
+            scenario_errors.append(finding)
+            warning('preparation', seed['seed_id'], finding['reason'])
     random.Random(42).shuffle(selected)
     selected = selected[:args.limit_seeds]
     if automatic:
@@ -126,19 +146,38 @@ def main():
     shots = load_fewshots(ROOT/'prompts/naturalization_shots.json', DEFAULT_TEMPLATES)
     records = [execute(v, client, ROOT / 'prompts') for variants in selected for v in variants]
     # 같은 seed에서 나온 base와 variant는 생성에 실패한 항목도 함께 남긴다.
-    check_fewshot_overlap(records, shots['shots'], DEFAULT_TEMPLATES)
+    for record in records:
+        try:
+            check_fewshot_overlap([record], shots['shots'], DEFAULT_TEMPLATES)
+        except Exception as exc:
+            record['validation_status'] = 'rejected'
+            record['errors'].append('fewshot_overlap:'+type(exc).__name__)
+            warning('fewshot_overlap', record['sample_id'], record['errors'])
     groups = defaultdict(list)
     for record in records:
         groups[record['variant_group_id']].append(record)
     for family in groups.values():
-        validate_controlled_family(family)
+        try:
+            validate_controlled_family(family)
+        except Exception as exc:
+            for record in family:
+                record['validation_status'] = 'rejected'
+                record['errors'].append('family:'+type(exc).__name__)
+            warning('family', family[0]['variant_group_id'], type(exc).__name__)
         from src.data.contracts import validate_pipeline_record
         for record in family:
             if record.get('validation_status') == 'semantic_pass_oracle_verified':
-                validate_pipeline_record(record,stage='gold')
+                try:
+                    validate_pipeline_record(record,stage='gold')
+                except Exception as exc:
+                    record['validation_status'] = 'rejected'
+                    record['errors'].append('gold_contract:'+type(exc).__name__)
+                    warning('gold_contract', record['sample_id'], record['errors'])
         complete = all(r['validation_status'] == 'semantic_pass_oracle_verified' for r in family)
         for record in family:
             record['controlled_family_status'] = 'semantic_complete_oracle_verified' if complete else 'incomplete'
+            if record.get('validation_status') != 'semantic_pass_oracle_verified':
+                warning('validation', record['sample_id'], record.get('errors') or record['validation_status'])
     output = args.output
     output.parent.mkdir(parents=True, exist_ok=True)
     for record in records:
