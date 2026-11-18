@@ -363,7 +363,7 @@ def read_training_records(path, partition):
             raise ValueError("Input contains a different partition, including test/OOD")
         if not record.get("turns"):
             raise ValueError("Dialogue generation is incomplete; real training is blocked")
-        if record.get("data_kind") not in ("real_derived", "real_derived_unlabeled"):
+        if record.get("data_kind") not in ("real_derived", "real_derived_unlabeled", "model_generated"):
             raise ValueError("CLI pilot accepts real-derived records only")
         if record.get('source_provenance',{}).get('fixture'):
             raise ValueError('Synthetic fixtures cannot enter real training')
@@ -478,7 +478,7 @@ def main(argv=None):
         seed_everything(args.seed)
         model = ModernBertPredictor(MODES[args.mode], model_id=encoder_config["model_id"], revision=encoder_config["revision"],
                                     lambda_state=lambda_state, mu_relevance=mu_relevance, nu_type=nu_type, dropout=model_config["predictor"]["dropout"])
-        metadata = {"mode": args.mode, "seed": args.seed, "trial": trial, "data_kind": "real_derived", "split_version": args.split_version,
+        metadata = {"mode": args.mode, "seed": args.seed, "trial": trial, "data_kind": train_records[0]["data_kind"], "split_version": args.split_version,
                     "experiment": seed_metadata(config["seeds"]),
                     "tuning": (saved_metadata['tuning'] if args.resume and 'tuning' in saved_metadata else
                                {"enabled": args.tune, "planned_trials": len(plan), "policy": config["tuning_policy"]}),

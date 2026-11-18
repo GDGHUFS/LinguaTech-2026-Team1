@@ -48,10 +48,12 @@ def load_fewshots(path, heldout_templates=()):
 
 def check_fewshot_overlap(rows, shots, heldout_templates):
     requests = {normalized_request(s['output']['final_request']) for s in shots}
+    families = {s['template_family_id'] for s in shots}
     for row in rows:
-        if row.get('template_family_id') in heldout_templates:
-            if normalized_request(row.get('final_request') or '') in requests:
-                raise ValueError('OOD final request copied from few-shot examples')
+        if row.get('template_family_id') in families:
+            raise ValueError('Few-shot template family reused as dataset sample')
+        if normalized_request(row.get('final_request') or '') in requests:
+            raise ValueError('Dataset final request copied from few-shot examples')
 
 
 def expression_audit(rows):
@@ -61,5 +63,5 @@ def expression_audit(rows):
         texts = [normalized_request(r['final_request']) for r in rows
                  if r.get('capability_id') == cap and r.get('final_request')]
         result[cap] = dict(generated_count=len(texts), distinct_final_requests=len(set(texts)),
-                           semantic_diversity_status='NOT_MEASURED_REQUIRES_QWEN_AND_HUMAN_REVIEW')
+                           semantic_diversity_status='NOT_MEASURED')
     return result

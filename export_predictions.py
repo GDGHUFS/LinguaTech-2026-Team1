@@ -39,7 +39,7 @@ def main(argv=None):
     metadata = payload.get('metadata') or {}
     if type(metadata.get('seed')) is not int or not metadata.get('model_config'):
         parser.error('A training checkpoint with seed/tokenizer/config provenance is required')
-    if metadata.get('data_kind') != 'real_derived':
+    if metadata.get('data_kind') not in ('real_derived', 'real_derived_unlabeled', 'model_generated'):
         parser.error('Synthetic/dry-run checkpoints are test-only and cannot be exported as research artifacts')
     model = ModernBertPredictor.from_checkpoint(path,device=args.device)
     mode = {'C_plus':'C+'}.get(metadata['mode'],metadata['mode'])

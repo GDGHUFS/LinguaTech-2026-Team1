@@ -61,7 +61,7 @@ def test_raw_labels_and_scope_presence_do_not_approve_generation(seed):
     assert seed['purpose_mapping_status'] == 'pending_review'
     assert make_variants(seed) == []
     assert generation_blockers(seed)
-    with pytest.raises(ValueError, match='review'):
+    with pytest.raises(ValueError, match='CAMBER automatic normalization provenance'):
         enforce_source_policy([seed])
     altered = deepcopy(seed)
     altered['source_appropriateness_label'] = 'appropriate'

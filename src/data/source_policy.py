@@ -19,6 +19,14 @@ def enforce_source_policy(rows, config_path='configs/data.yaml'):
     for row in rows:
         if not selected_source(row, config):
             raise ValueError('Disabled source/component; update source_selection explicitly')
+        if config.get('generation_mode') == 'camber_automatic':
+            from src.data.automatic import validate_scenario
+            validate_scenario(row)
+            original = originals.get(row.get('seed_id'))
+            if original is None or any(row.get(k) != original.get(k) for k in
+                    ('source_dataset', 'source_record_id', 'source_seed_id', 'group_id', 'source_provenance')):
+                raise ValueError('Canonical identity/provenance mismatch')
+            continue
         if generation_blockers(dict(row, status='eligible_pending_review')):
             raise ValueError('Evidence-bound source review/generation approval missing')
         validate_source_approval(row, originals)
@@ -66,6 +74,13 @@ def selected_source(row, config):
 
 
 def generation_blockers(seed):
+    if seed.get('source_normalization', {}).get('mode') == 'camber_automatic':
+        from src.data.automatic import validate_scenario
+        try:
+            validate_scenario(seed)
+            return []
+        except (ValueError, KeyError, TypeError):
+            return ['invalid_qwen_scenario']
     reasons = []
     if seed.get('source_checks', {}).get('conflicts'):
         reasons.append('source_semantic_conflict')

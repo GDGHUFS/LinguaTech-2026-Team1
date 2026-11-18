@@ -38,4 +38,4 @@ CAP07/08 preserve the subject, information, recipient, purpose and request meani
 CAP09 must consider initial rules, story mentions, aliases, possessives, pronouns and
 unique recipients inferable from context. A null structured recipient is not evidence
 that the natural-language recipient is unknown. Record conflicts in mismatches.
-These checks remain subject to independent human QA; they do not grant approval.
+Unverified meaning must fail automatic validation; no human approval file is required.

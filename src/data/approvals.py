@@ -1,4 +1,4 @@
-"""사람이 제공한 승인 기록과 최종 실행 조건을 검증한다."""
+"""자동 Qwen/oracle 검증과 데이터 freeze, 선택적 기존 승인 기록을 검증한다."""
 import json
 from pathlib import Path
 from src.utils.reproducibility import content_hash, file_hash
@@ -51,10 +51,64 @@ def validate_qa(rows, manifest):
                     raise ValueError('CAP09 recipient leaked in dialogue')
 
 
+SPLIT_FIELDS = ('sample_id','source_dataset','source_record_id','source_seed_id','scenario_id','seed_id',
+                'group_id','variant_group_id','split','split_manifest_hash','template_family_id',
+                'operation_trace','final_request','turns','evaluation_eligible')
+
+
+def split_membership(rows):
+    return [{k:r[k] for k in SPLIT_FIELDS if k in r} for r in rows]
+
+
+def validate_automatic_freeze(rows, manifest):
+    import re
+    import yaml
+    from src.data.splitting import check_leakage
+    from src.evaluation.protocol import _manifest
+    from src.data.serving import validate_generation_cohort
+    snapshot = manifest.get('split_manifest')
+    membership = manifest.get('split_membership')
+    if not snapshot or not membership:
+        raise ValueError('Complete split manifest/membership required for automatic freeze')
+    check_leakage(membership, snapshot['ood_compositions'], snapshot['ood_templates'],
+                  snapshot.get('fewshot_template_families', ()))
+    _manifest(snapshot, membership)
+    indexed = {r['sample_id']:r for r in membership}
+    if set(indexed) != set(manifest.get('records', {})):
+        raise ValueError('Frozen record/membership IDs differ')
+    for r in split_membership(rows):
+        if indexed.get(r['sample_id']) != r:
+            raise ValueError('Frozen split membership changed')
+    generation = validate_generation_cohort(rows)
+    if manifest.get('generation_model') != generation:
+        raise ValueError('Frozen generation revision differs')
+    model_path = manifest.get('model_config_path')
+    if not model_path or manifest.get('config_hashes', {}).get(model_path) != file_hash(model_path):
+        raise ValueError('Frozen model config required/changed')
+    model = yaml.safe_load(Path(model_path).read_text(encoding='utf-8'))
+    for role in ('encoder','target','generation'):
+        if not re.fullmatch(r'[0-9a-f]{40}', model.get(role, {}).get('revision') or ''):
+            raise ValueError('Unverified immutable model revision: '+role)
+    if any(model['generation'].get(k) != generation[k] for k in ('model_id',)) or model['generation']['revision'] != generation['model_revision']:
+        raise ValueError('Serving Qwen revision differs from frozen configuration')
+    for r in rows:
+        target = r.get('target_execution') or {}
+        if target.get('model_id') != model['target']['model_id'] or target.get('model_revision') != model['target']['revision']:
+            raise ValueError('Target revision differs from frozen configuration')
+
+
 def validate_freeze(rows, manifest, data_config, config_paths):
-    identity(manifest)
+    automatic = data_config.get('generation_mode') == 'camber_automatic'
+    if automatic:
+        if manifest.get('schema_version') != 'automatic-freeze-1':
+            raise ValueError('Automatic freeze manifest required')
+        from src.data.automatic import validate_generated
+        validate_generated(rows)
+        validate_automatic_freeze(rows, manifest)
+    else:
+        identity(manifest)
     audit = manifest.get('audit_summary', {})
-    if (audit.get('independent_support_annotations', 0) < 50 or
+    if not automatic and (audit.get('independent_support_annotations', 0) < 50 or
             audit.get('semantic_alignment', 0) < .95 or
             audit.get('support_f1', 0) < .95 or audit.get('support_exact_match', 0) < .90 or
             audit.get('leave_one_turn_out_checked') is not True):
@@ -81,11 +135,20 @@ def validate_freeze(rows, manifest, data_config, config_paths):
 
 def enforce_execution(rows, *, mode='pilot', qa_path=None, freeze_path=None,
                       data_config='configs/data.yaml', config_paths=()):
-    """소스 검수와 QA를 확인하고 final 모드에서는 고정 승인 기록까지 검증한다. 미충족 시 ValueError로 실행을 차단한다."""
+    """설정된 생성 경로의 검증과 final record/config freeze를 확인한다."""
     from src.data.source_policy import enforce_source_policy
     config = enforce_source_policy(rows, data_config)
     if mode not in ('pilot','final'):
         raise ValueError('Execution mode must be pilot/final')
+    if config.get('generation_mode') == 'camber_automatic':
+        from src.data.automatic import validate_generated
+        validate_generated(rows)
+        if mode == 'final':
+            freeze_path = freeze_path or config.get('approvals', {}).get('freeze_manifest')
+            if not freeze_path:
+                raise ValueError('Run scripts/08_freeze.py to create the automatic freeze manifest')
+            validate_freeze(rows, json.loads(Path(freeze_path).read_text(encoding='utf-8')), config, config_paths)
+        return config
     if not qa_path:
         raise ValueError('Generated human QA manifest required')
     validate_qa(rows, json.loads(Path(qa_path).read_text(encoding='utf-8')))
@@ -102,7 +165,7 @@ def research_rows(rows):
         raise ValueError('Research cohort empty')
     template = Path('prompts/target_decision.txt').read_text(encoding='utf-8-sig')
     for row in rows:
-        if row.get('data_kind') not in ('real_derived','real_derived_unlabeled') or row.get('source_provenance',{}).get('fixture'):
+        if row.get('data_kind') not in ('real_derived','real_derived_unlabeled','model_generated') or row.get('source_provenance',{}).get('fixture'):
             raise ValueError('Mock/fixture/pending research data forbidden')
         if row.get('parse_status') == 'VALID':
             validate_observed_provenance(row, template)

@@ -32,15 +32,19 @@ def make_variants(seed, modify_fields=('authorization',)):
             'template_family_id': 'b_pilot_base_v1', 'request_style': 'direct'}
     for key in ('source_component', 'source_evidence', 'semantic_review', 'consent_assessment',
                 'disclosure_assessment', 'purpose_mapping_status', 'generation_ready', 'expansion',
-                'annotation', 'source_motive', 'disclosure_purpose', 'source_checks', 'adapter_revision'):
+                'annotation', 'source_motive', 'disclosure_purpose', 'source_checks', 'adapter_revision',
+                'source_normalization'):
         if key in seed:
             base[key] = deepcopy(seed[key])
     base['human_review_status'] = seed.get('human_review_status', 'pending')
+    base['data_kind'] = seed.get('data_kind', 'real_derived_unlabeled')
+    if seed.get('source_normalization'):
+        base['source_record'] = deepcopy(seed['source_record'])
     base['source_facts'] = {k: deepcopy(seed.get(k)) for k in SLOTS + ('consent',)}
     base['policy_temporal_boundary'] = {
         'source_history': 'Preserve historical secrecy, recovery and knowledge limits.',
         'synthetic_policy': 'Explicit later hypothetical policy; never original consent.',
-        'status': 'requires_semantic_validation_and_independent_qa'}
+        'status': 'requires_automatic_semantic_validation'}
     result = [base]
     for cap, (name, relation) in CAPABILITIES.items():
         v = deepcopy(base)
@@ -107,4 +111,12 @@ def apply_holdout_plan(variants, pool):
                  rule=dict(rule,rule_id=rid+'_exception',authorization='DENY',scope={'channel':'secure_portal'}))]
         v['request']['channel']='secure_portal'
         v['template_family_id']='b_pilot_composition_v1'
-    return variants+[v]
+    companion = deepcopy(v)
+    companion['sample_id'] += '__contrast'
+    companion['variant_id'] += '__contrast'
+    if pool == 'ood_template':
+        revoke = next(r for r in variants if r.get('capability_id') == 'CAP02')
+        companion['operation_trace'] = deepcopy(revoke['operation_trace'])
+    else:
+        companion['request']['channel'] = 'public_portal'
+    return variants+[companion, v]

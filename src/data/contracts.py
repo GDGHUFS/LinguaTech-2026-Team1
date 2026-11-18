@@ -144,7 +144,7 @@ class Sample(Contract):
     variant_group_id: NonEmpty
     variant_id: NonEmpty
     parent_variant_id: NonEmpty | None
-    data_kind: Literal["real_derived", "real_derived_unlabeled", "mock"]
+    data_kind: Literal["real_derived", "real_derived_unlabeled", "model_generated", "mock"]
     source_provenance: dict[str, Any]
     annotation: dict[str, Any] | None = None
     source_motive: dict[str, Any] | None = None
@@ -297,7 +297,8 @@ def validate_pipeline_record(record: dict, *, stage: str | None = None) -> Sampl
         if any(type(t) is not int or t not in history for t in turns) or turns != sorted(turns):
             raise ValueError('Operation chronology must reference actual history turns')
         actual=evaluate_policy(sample.initial_rules,events,canonical_request(record['request']),sample.request_turn_id,ENGINE_VERSION)
-        if actual['annotation_status']!='VALID' or any(actual[k]!=record.get(k) for k in ('gold_decision','gold_state','supporting_turn_ids')):
+        if actual['annotation_status']!='VALID' or any(actual[k]!=record.get(k) for k in
+                ('gold_decision','gold_state','supporting_turn_ids','supporting_rule_ids','evidence_trace')):
             raise ValueError('Gold/state/relevant-turn annotations disagree with the current A oracle')
     return sample
 

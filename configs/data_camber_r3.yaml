@@ -1,10 +1,11 @@
 # Separate r3 revision; prior pilot and split paths are preserved.
 schema_version: 1.0.0
-status: camber_confaideplus_review_pending
+generation_mode: camber_automatic
+status: camber_automatic
 finalized: null
 paths:
   raw: data/raw
-  annotated: verification/camber_adapter_r3_verified
+  annotated: data/annotated
   generated: data/generated/camber_adapter_r3
   labeled: data/labeled/camber_adapter_r3
   splits: data/splits/camber_adapter_r3

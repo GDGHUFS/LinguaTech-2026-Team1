@@ -102,19 +102,40 @@ def inspect_readiness(root):
         record('source_approval','PASS','exact-record approvals verified',approved_groups=len({r['group_id'] for r in approved}))
     except (OSError,ValueError,KeyError,TypeError) as exc:
         record('source_approval','BLOCKED',str(exc),approved_groups=0)
+    if configs['data'].get('generation_mode') == 'camber_automatic':
+        try:
+            from src.data.source_policy import selected_source
+            canonical=root/configs['data']['paths']['annotated']/configs['data']['canonical_filename']
+            source_rows=read_rows(canonical)
+            if not source_rows or any(not selected_source(r, configs['data']) or not r.get('group_id') for r in source_rows):
+                raise ValueError('Selected canonical group IDs required')
+            from src.data.automatic import source_scenario, SourceExcluded
+            inputs=[]
+            for row in source_rows:
+                try:
+                    source_scenario(row)
+                    inputs.append(row)
+                except SourceExcluded:
+                    pass
+            if not inputs:
+                raise ValueError('No original CAMBER records ready for automatic normalization')
+            record('source_approval','PASS','original CAMBER inputs ready; Qwen extraction NOT RUN; no human approval required',
+                   candidate_groups=len({r['group_id'] for r in inputs}))
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            record('source_approval','BLOCKED',str(exc))
     from evaluate import read_rows
     generated=root/configs['data']['paths']['generated']/'generated.jsonl'
     rows=read_rows(generated) if generated.is_file() else []
     ready=[r for r in rows if r.get('validation_status')=='semantic_pass_oracle_verified' and r.get('oracle_relation_status')=='passed']
-    record('generated_dialogues','PASS' if ready else 'BLOCKED','validated saved dialogue availability; human QA is separate',
+    record('generated_dialogues','PASS' if ready else 'BLOCKED','validated saved dialogue availability',
         records=len(rows),ready_records=len(ready),generation_statuses=dict(Counter(r.get('generation_status') for r in rows)))
     try:
         from src.data.approvals import enforce_execution
         gate=configs['data'].get('approvals',{})
         enforce_execution(ready,mode='pilot',qa_path=gate.get('qa_manifest'),data_config=root/'configs/data.yaml')
-        record('human_QA','PASS','source and generated human QA evidence verified')
+        record('automatic_validation','PASS','Qwen semantics and oracle replay verified')
     except (OSError,ValueError,KeyError,TypeError) as exc:
-        record('human_QA','BLOCKED',str(exc))
+        record('automatic_validation','BLOCKED',str(exc))
     folder=root/configs['data']['paths']['splits']
     manifest_path=folder/'split_manifest.json'
     if manifest_path.is_file():
@@ -166,8 +187,8 @@ def inspect_readiness(root):
     record('generation_protocol','PASS' if generation.get('model_id') and generation.get('prompt_version') else 'BLOCKED','exact Qwen serving model and prompt version required')
     stage_readiness = {
         'generation': 'READY' if all(checks.get(k,{}).get('status')=='PASS' for k in ('source_approval','generation_protocol','naturalization_shots')) else 'BLOCKED',
-        'target_pilot': 'READY' if checks['human_QA']['status']=='PASS' and checks['target_weights']['status']=='PASS' else 'BLOCKED',
-        'final_training': 'READY' if all(checks.get(k,{}).get('status')=='PASS' for k in ('human_QA','final_split_freeze','class_coverage','runtime','encoder_weights')) else 'BLOCKED'}
+        'target_pilot': 'READY' if checks['automatic_validation']['status']=='PASS' and checks['target_weights']['status']=='PASS' else 'BLOCKED',
+        'final_training': 'READY' if all(checks.get(k,{}).get('status')=='PASS' for k in ('automatic_validation','final_split_freeze','class_coverage','runtime','encoder_weights')) else 'BLOCKED'}
     return dict(stage_readiness=stage_readiness,status='BLOCKED' if any(c['status'] in ('BLOCKED','NOT RUN') for c in checks.values()) else 'READY',
         mode='read_only_preflight_no_experiment',checks=checks)
 

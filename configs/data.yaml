@@ -1,6 +1,7 @@
 # [B] pilot 실측 전에는 초기 설정으로 사용한다.
 schema_version: 1.0.0
-status: camber_confaideplus_review_pending
+generation_mode: camber_automatic
+status: camber_automatic
 finalized: null
 paths:
   raw: data/raw

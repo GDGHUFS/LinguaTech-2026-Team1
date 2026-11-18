@@ -1,8 +1,39 @@
 """[B] 필드와 operation 순서가 맞는지 검사하고, Qwen의 검증 결과를 확인한다."""
 from src.data.capability_matrix import CAPABILITIES
 
+def validate_capability(sample):
+    """Required CAP operations; a state intervention need not flip the final decision."""
+    cap = sample.get('capability_id')
+    if cap is None:
+        return []
+    if cap not in CAPABILITIES or sample.get('expected_gold_relation') != CAPABILITIES[cap][1]:
+        return ['invalid_capability_relation']
+    operations = sample.get('operation_trace', [])
+    sequence = [o.get('operation', o.get('op')) for o in operations]
+    sequence = ['MODIFY' if op == 'UPDATE' else op for op in sequence]
+    required = {'CAP01':['ADD'], 'CAP02':['REVOKE'], 'CAP03':['MODIFY'],
+                'CAP04':['EXCEPTION'], 'CAP05':['REVOKE','REINSTATE'], 'CAP06':['NO_CHANGE'],
+                'CAP07':[], 'CAP08':[], 'CAP09':[]}
+    errors = [] if sequence == required[cap] else ['capability_operation_mismatch:'+cap]
+    if cap == 'CAP01' and sample.get('initial_rules'):
+        errors.append('cap01_must_introduce_new_rule')
+    if cap == 'CAP03' and sequence == ['MODIFY']:
+        changes = operations[0].get('changes', {})
+        if not changes or not set(changes) <= {'authorization','recipient','purpose','data_type'}:
+            errors.append('cap03_invalid_scope_change')
+    if cap == 'CAP05' and len(operations) == 2:
+        ids = [o.get('rule_id') for o in operations]
+        if not ids[0] or ids[0] != ids[1]:
+            errors.append('cap05_reinstate_must_follow_same_rule_revoke')
+    if cap in ('CAP07','CAP08') and sample.get('request_style') != {'CAP07':'paraphrase','CAP08':'indirect'}[cap]:
+        errors.append('capability_request_style_mismatch')
+    if cap == 'CAP09' and sample.get('request', {}).get('recipient') is not None:
+        errors.append('cap09_required_context_not_missing')
+    return errors
+
+
 def validate_structure(sample):
-    errors = []
+    errors = validate_capability(sample)
     from src.rules.schema import validate_trace_priorities
     try:
         validate_trace_priorities(sample['initial_rules'], sample['operation_trace'])
