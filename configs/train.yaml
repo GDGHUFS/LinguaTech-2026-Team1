@@ -40,7 +40,7 @@ selection_metric: validation_auprc
 selection_tiebreak: lower_brier
 max_grad_norm: 1.0
 max_optimizer_steps: null
-checkpoint_every_steps: null
+checkpoint_every_steps: 50
 tuning_trials: 3
 tuning_policy: up_to_budget_unique_effective_settings_per_mode_per_seed
 tuning_seed_policy: same_seed_for_all_trials_and_modes

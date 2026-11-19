@@ -48,9 +48,9 @@ def training_summary(state, metadata, config):
 
 
 def write_training_summary(directory, state, metadata, config):
+    from src.data.progress import atomic_text
     summary = training_summary(state, metadata, config)
-    (Path(directory)/'training_summary.json').write_text(
-        json.dumps(summary, indent=2, allow_nan=False)+'\n', encoding='utf-8')
+    atomic_text(Path(directory)/'training_summary.json', json.dumps(summary, indent=2, allow_nan=False)+'\n')
     return summary
 
 

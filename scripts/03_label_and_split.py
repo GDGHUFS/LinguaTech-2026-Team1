@@ -12,6 +12,8 @@ sys.path.insert(0, str(ROOT))
 from src.data.labeling import LocalTarget, failure_labels, run_target, target_input
 from src.data.splitting import DEFAULT_COMPOSITIONS, DEFAULT_TEMPLATES, split_samples
 from src.data.batch import read_items, warning
+from src.data.progress import Journal, signature, atomic_text
+import os
 
 
 def main():
@@ -31,6 +33,7 @@ def main():
     parser.add_argument('--execution-mode', choices=('pilot','final'), default='pilot')
     parser.add_argument('--qa-manifest')
     parser.add_argument('--freeze-manifest')
+    parser.add_argument('--resume', action='store_true', help='Continue the matching Target item journal')
     args = parser.parse_args()
     import yaml
     from src.data.source_policy import selected_source
@@ -42,8 +45,14 @@ def main():
     if args.seed != 42:
         parser.error("This experiment registers only random seed 42")
     error_path = args.report.with_suffix('.errors.jsonl')
-    if args.labeled_output.exists() or args.report.exists() or error_path.exists() or any(args.splits_dir.glob('*.json*')):
+    progress_path = args.labeled_output.with_suffix('.progress.jsonl')
+    if (args.labeled_output.exists() or args.report.exists() or error_path.exists() or any(args.splits_dir.glob('*.json*'))) and not (args.resume and progress_path.exists()):
         parser.error('Existing labels/splits/reports are preserved; choose new output paths')
+    fingerprint = signature({k:v for k,v in vars(args).items() if k != 'resume'},
+        [args.input, args.config, args.qa_manifest, args.freeze_manifest,
+         ROOT/'configs/model.yaml', *sorted((ROOT/'prompts').glob('*.*')),
+         *sorted((ROOT/'src/data').glob('*.py')), Path(__file__)])
+    journal = Journal(progress_path, fingerprint, resume=args.resume)
     if not args.full_run and not 100 <= args.limit <= 200:
         parser.error('Pilot limit must be 100-200')
     if args.execute and not args.revision:
@@ -52,7 +61,7 @@ def main():
     rows = read_items(args.input, failures, required=('sample_id', 'group_id', 'variant_group_id'))
     def save_failures():
         error_path.parent.mkdir(parents=True, exist_ok=True)
-        error_path.write_text(''.join(json.dumps(x, ensure_ascii=False)+'\n' for x in failures), encoding='utf-8')
+        atomic_text(error_path, ''.join(json.dumps(x, ensure_ascii=False)+'\n' for x in failures))
     save_failures()
     if not rows:
         parser.error('Empty input; no output written')
@@ -104,18 +113,26 @@ def main():
     selected = set(eligible if args.full_run else sorted(eligible)[:args.limit])
     if args.execute and not selected:
         parser.error('No natural-language dialogue available; run generation first')
-    runner = LocalTarget(args.revision) if args.execute else None
+    # Load once before the item loop; a broken shared model is not an item error.
+    needs_inference = args.execute and any('target:'+sid not in journal.events for sid in selected)
+    runner = LocalTarget(args.revision) if needs_inference else None
     template = (ROOT/'prompts/target_decision.txt').read_text(encoding='utf-8-sig')
+    def observe(row):
+        nonlocal runner
+        if runner is None:
+            runner = LocalTarget(args.revision)
+        result = run_target(row, runner, template)
+        validate_pipeline_record(result, stage='target')
+        return result
     results = []
     output = args.labeled_output
     output.parent.mkdir(parents=True, exist_ok=True)
     # 다음 호출이 실패해도 받은 응답은 남도록 호출할 때마다 저장한다.
     with output.open('w', encoding='utf-8') as stream:
         for row in rows:
-            if runner and row['sample_id'] in selected:
+            if args.execute and row['sample_id'] in selected:
                 try:
-                    result = run_target(row, runner, template)
-                    validate_pipeline_record(result,stage='target')
+                    result = journal.run('target:'+row['sample_id'], lambda: observe(row))
                 except Exception as exc:
                     finding = dict(sample_id=row['sample_id'], status='excluded',
                                    reason='target:'+type(exc).__name__)
@@ -128,11 +145,12 @@ def main():
             else:
                 result = dict(row, target_attempts=[], target_decision=None, parse_status='NOT_RUN',
                     target_error=None, latency_seconds=None, research_dataset_status='unlabeled_target_only',
-                    pending_reason='dialogue_missing_or_unvalidated' if row['sample_id'] not in eligible else 'inference_not_requested' if not runner else 'outside_pilot_limit')
+                    pending_reason='dialogue_missing_or_unvalidated' if row['sample_id'] not in eligible else 'inference_not_requested' if not args.execute else 'outside_pilot_limit')
                 result.update(failure_labels(row.get('gold_decision'), None))
             results.append(result)
             stream.write(json.dumps(result, ensure_ascii=False)+'\n')
             stream.flush()
+            os.fsync(stream.fileno())
     if not results:
         parser.error('No Target records remain; see '+str(error_path))
     split_rows, manifest = split_samples(results, seed=args.seed, compositions=compositions, templates=templates, fewshot_templates=fewshot_templates, ratios=tuple(config['split']['id_ratios'][k] for k in ('train','validation','id_test')))
@@ -146,8 +164,8 @@ def main():
     folder.mkdir(parents=True, exist_ok=True)
     for partition in ('train','validation','id_test','ood_composition','ood_template','ood_joint'):
         subset = [dict(r, split_manifest_hash=manifest['manifest_hash']) for r in split_rows if r['split']==partition]
-        (folder/f'{partition}.jsonl').write_text(''.join(json.dumps(r, ensure_ascii=False)+'\n' for r in subset), encoding='utf-8')
-    (folder/'split_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+        atomic_text(folder/f'{partition}.jsonl', ''.join(json.dumps(r, ensure_ascii=False)+'\n' for r in subset))
+    atomic_text(folder/'split_manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
     report = args.report
     report.parent.mkdir(parents=True, exist_ok=True)
     attempted = [r for r in results if r['target_attempts']]

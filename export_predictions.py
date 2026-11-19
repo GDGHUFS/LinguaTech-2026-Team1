@@ -5,6 +5,7 @@ from pathlib import Path
 
 from evaluate import read_rows
 from src.utils.reproducibility import file_hash
+from src.data.progress import Journal, signature, atomic_text, append_json
 
 
 def main(argv=None):
@@ -19,13 +20,16 @@ def main(argv=None):
     parser.add_argument('--execution-mode', choices=('pilot','final'), default='final')
     parser.add_argument('--qa-manifest')
     parser.add_argument('--freeze-manifest')
+    parser.add_argument('--resume', action='store_true')
     args = parser.parse_args(argv)
     path = Path(args.checkpoint)
     if not path.is_file():
         print(json.dumps(dict(status='SKIPPED',reason='checkpoint_missing')))
         return 0
     outputs = [Path(p) for p in (args.out,args.embeddings_out) if p]
-    if len(set(p.resolve() for p in outputs)) != len(outputs) or any(p.exists() for p in outputs):
+    # Evaluation reads every top-level *.jsonl; keep journals outside that set.
+    progress_path = Path(args.out).parent/'.progress'/Path(args.out).name
+    if len(set(p.resolve() for p in outputs)) != len(outputs) or (any(p.exists() for p in outputs) and not (args.resume and progress_path.exists())):
         parser.error('Use distinct new output files')
     try:
         import torch
@@ -62,13 +66,21 @@ def main(argv=None):
     enforce_execution(records, mode=args.execution_mode, qa_path=args.qa_manifest, freeze_path=args.freeze_manifest, data_config=args.data_config, config_paths=[args.data_config,'configs/model.yaml','configs/train.yaml'])
     if not records:
         parser.error('No common valid-Target records; no predictions written')
-    pairs = list(predict_records(model,tokenizer,records,model_name=mode,seed=metadata['seed'],
-                                max_length=config['max_length'],checkpoint_hash=file_hash(path),diagnostic_only=args.diagnostic_only))
-    # 추론이 모두 성공한 뒤 출력을 시작한다. 파일 저장 도중의 실패까지 원자적으로 처리하지는 않는다.
-    for output,index in zip(outputs,range(2)):
-        output.parent.mkdir(parents=True,exist_ok=True)
-        output.write_text(''.join(json.dumps(pair[index],allow_nan=False)+'\n' for pair in pairs),encoding='utf-8')
-    print(json.dumps(dict(status='OK',samples=len(pairs))))
+    if len({r['sample_id'] for r in records}) != len(records):
+        parser.error('Duplicate export sample ID')
+    checkpoint_hash = file_hash(path)
+    journal = Journal(progress_path, signature(dict(args={k:v for k,v in vars(args).items() if k != 'resume'},
+        records=records, checkpoint_hash=checkpoint_hash),
+        [Path(__file__), Path('src/evaluation/export.py'), args.data_config, args.freeze_manifest]), resume=args.resume)
+    for output in outputs:
+        atomic_text(output, '')
+    for record in records:
+        pair = journal.run('predict:'+record['sample_id'], lambda: list(predict_records(
+            model,tokenizer,[record],model_name=mode,seed=metadata['seed'],max_length=config['max_length'],
+            checkpoint_hash=checkpoint_hash,diagnostic_only=args.diagnostic_only))[0], cache_failures=False)
+        for index, output in enumerate(outputs):
+            append_json(output, pair[index])
+    print(json.dumps(dict(status='OK',samples=len(records))))
     return 0
 
 

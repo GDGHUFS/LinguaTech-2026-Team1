@@ -28,6 +28,14 @@ seed 42, max_epochs 10, patience 3, AdamW, batch 8 × accumulation 2가 기본�
 
 개별 입력 JSONL 형식, 원문 정규화, 모델 호출, 구조·의미·oracle 검증 오류는 WARNING을 터미널에 출력하고 해당 항목을 제외한 뒤 나머지를 계속 처리한다. 생성 실패와 검증 오류는 generation audit와 원본 생성 결과에, 원문 제외는 `.source.jsonl`에, Target 입력/처리 예외는 report와 같은 이름의 `.errors.jsonl`에 남긴다. 비교 family의 일부가 생성·검증에 실패하면 그 family는 최종 데이터에서 제외한다. Target 형식/실행 오류는 null label로 기록하고 다음 항목을 처리한다. 사용할 항목이 전혀 없거나 공통 설정·모델 로딩·저장 장치에 문제가 있으면 해당 단계는 중단하며, 최종 데이터의 클래스·누수·freeze 검증은 유지한다.
 
+### 중간 저장과 중단 후 재개
+
+생성은 원문 정규화 결과와 각 대화의 생성·검증 결과를 건별로 `*.progress.jsonl`에 append하고 flush/fsync한다. 생성 JSONL도 건별로 갱신한다. Target 라벨과 activation 추출도 건별로 저장한다. 예측/CLS 추출 기록은 평가 입력에 섞이지 않도록 출력 폴더의 `.progress/`에 저장한다. 진행 기록과 원본 입력·config·prompt를 함께 보존한다. 아래 명령의 `--resume`은 최초 실행에도 사용할 수 있으며, 중단 후 같은 RUN과 경로로 해당 명령을 다시 실행하면 저장된 항목은 재호출하지 않는다. 이미 기록된 생성·Target 실패도 처리 완료로 유지한다. 저장 도중 끊어진 마지막 줄은 복구하고, 완료 기록이 없는 항목부터 처리한다. 입력/config/prompt/revision이 바뀌면 재개를 거부한다.
+
+생성 JSONL은 완료 전에는 family 검증이 끝나지 않은 중간 결과다. 생성 명령이 정상 종료된 뒤 7절을 실행한다. Split/manifest·최종 집계는 전체 처리가 끝나야 확정할 수 있으므로 마지막에 만들며, 중간에 중단되면 저장된 건별 기록으로 다시 구성한다. 진행 기록 없이 기존 산출물만 있는 이전 실행은 재개할 수 없다.
+
+학습은 기본 **50 optimizer step마다**, 그리고 epoch 종료·정상 중단 시 `last.pt`, 학습 CSV, summary JSON을 저장한다. `best.pt`는 validation 개선 시 저장한다. checkpoint에는 optimizer/scheduler/RNG와 다음 batch 위치가 포함된다. 아래 학습 명령은 `last.pt`가 있으면 재개한다. 강제 종료 시 마지막 저장 이후 약 50 step 이내의 작업과 저장 중이던 step은 다시 계산할 수 있다. 학습 오류를 무시하고 다음 batch로 넘기는 동작은 추가하지 않는다. 최종 freeze·평가·집계 JSON은 완료 시 확정하는 산출물이다.
+
 ## 3. 서버 환경 준비
 
 관리자가 NVIDIA driver, Python 3.11 + venv, curl을 준비해야 한다. RAM 64GB 이상, 여유 디스크 100GB 이상은 운영 권장치다. 인터넷은 최초 패키지/모델/원본 다운로드에 필요하며 유료 외부 추론 API는 필요 없다.
@@ -173,22 +181,22 @@ assert json.loads(x['choices'][0]['message']['content'])=={'ok':True}
 PY
 
 # 먼저 2개 source로 API/생성/검증 연결만 확인한다.
-python scripts/02_prepare.py --input "$R/canonical.jsonl" \
+python scripts/02_prepare.py --resume --input "$R/canonical.jsonl" \
   --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B --revision "$GEN_REV" \
   --limit-seeds 2 --execution-mode pilot \
   --output "$R/smoke-generated.jsonl" --audit "$R/smoke-generation-audit.csv" \
-  2>&1 | tee "$R/logs/generation-smoke.txt"
+  2>&1 | tee -a "$R/logs/generation-smoke.txt"
 ```
 
 smoke audit의 오류와 `semantic_complete_oracle_verified` family 비율을 확인한 뒤 전체 canonical group을 생성한다. smoke는 처리량 측정이며 최종 데이터에 합치지 않는다. 아래는 limit을 canonical 수로 주므로 묵시적 20개 제한을 피한다.
 
 ```bash
 N_SOURCES=$(wc -l < "$R/canonical.jsonl")
-python scripts/02_prepare.py --input "$R/canonical.jsonl" \
+python scripts/02_prepare.py --resume --input "$R/canonical.jsonl" \
   --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B --revision "$GEN_REV" \
   --limit-seeds "$N_SOURCES" --execution-mode final \
   --output "$R/generated-all.jsonl" --audit "$R/generation-audit.csv" \
-  2>&1 | tee "$R/logs/generation.txt"
+  2>&1 | tee -a "$R/logs/generation.txt"
 kill "$SERVE_PID"
 wait "$SERVE_PID" || true
 unset QWEN_API_KEY
@@ -199,7 +207,7 @@ nvidia-smi
 
 정규화·제외 기록은 audit CSV와 같은 이름의 `.source.jsonl`에 자동 저장된다. 추출 실패 때문에 최종 source 수가 canonical 수보다 적거나 0일 수 있다. 이유와 raw 정규화 응답을 확인하고, 원문 사실을 채워 넣거나 독립 상황으로 대체하지 않는다.
 
-서버 종료와 GPU 메모리 회수를 확인한다. OOM이면 다른 GPU 프로세스를 먼저 확인하고 서버 메모리/context를 조정한다. context를 무조건 줄이면 입력이 잘릴 수 있다. generation은 마지막에 파일을 쓰므로 중간 장애 시 자동 resume가 아니다. 재시도는 새 output/audit 경로를 사용한다. 실제 1회 요청 timeout은 180초다.
+서버 종료와 GPU 메모리 회수를 확인한다. OOM이면 다른 GPU 프로세스를 먼저 확인하고 서버 메모리/context를 조정한다. context를 무조건 줄이면 입력이 잘릴 수 있다. 중단 후 동일 명령의 `--resume`으로 진행 기록부터 재개한다. 실제 1회 요청 timeout은 180초다.
 
 ## 7. 자동 검증 통과 family 선별
 
@@ -225,19 +233,19 @@ Qwen 의미 검사, CAP별 인용 근거, oracle gold/support 재계산을 통�
 ## 8. Target pilot → 전체 라벨링과 split
 
 ```bash
-python scripts/03_label_and_split.py --input "$R/generated.jsonl" \
+python scripts/03_label_and_split.py --resume --input "$R/generated.jsonl" \
   --revision "$TARGET_REV" --execute --limit 200 --execution-mode pilot \
   --labeled-output "$R/pilot-target.jsonl" --splits-dir "$R/pilot-splits" \
-  --report "$R/pilot-target.csv" 2>&1 | tee "$R/logs/target-pilot.txt"
+  --report "$R/pilot-target.csv" 2>&1 | tee -a "$R/logs/target-pilot.txt"
 ```
 
 pilot에서 attempted 최소 100, JSON valid rate, 첫 응답 valid rate, OOM/latency, max_new_tokens 64 충분 여부를 확인한다. pilot subset은 eligible sample_id 정렬 앞 200개라 모든 partition을 대표하지 않을 수 있다. 본 실험은 아래 전체 라벨로 별도 생성한다. freeze 전 전체 데이터 준비 단계이므로 execution-mode는 pilot을 유지한다.
 
 ```bash
-python scripts/03_label_and_split.py --input "$R/generated.jsonl" \
+python scripts/03_label_and_split.py --resume --input "$R/generated.jsonl" \
   --revision "$TARGET_REV" --execute --full-run --execution-mode pilot \
   --labeled-output "$R/target-all.jsonl" --splits-dir "$R/splits" \
-  --report "$R/target-all.csv" 2>&1 | tee "$R/logs/target-all.txt"
+  --report "$R/target-all.csv" 2>&1 | tee -a "$R/logs/target-all.txt"
 python - <<'PY'
 import os,json
 from pathlib import Path
@@ -259,11 +267,15 @@ unsafe label은 **gold DENY → Target ALLOW**다. 단순 불일치와 다르다
 
 ```bash
 export SPLIT_VERSION="$(python -c 'import json,os; print(json.load(open(os.environ["R"]+"/splits/split_manifest.json"))["manifest_hash"])')"
-python train.py --variant C+ --train "$R/splits/train.jsonl" \
+PILOT_RESUME=()
+if [ -f "$R/pilot-checkpoints/C_plus/seed_42/trial_0/last.pt" ]; then
+  PILOT_RESUME=(--resume "$R/pilot-checkpoints/C_plus/seed_42/trial_0/last.pt")
+fi
+python train.py --variant C+ "${PILOT_RESUME[@]}" --train "$R/splits/train.jsonl" \
   --validation "$R/splits/validation.jsonl" --split-version "$SPLIT_VERSION" \
   --seed 42 --device cuda --pilot --execution-mode pilot \
   --output-dir "$R/pilot-checkpoints" \
-  | tee "$R/logs/train-pilot.txt"
+  | tee -a "$R/logs/train-pilot.txt"
 ```
 
 `--pilot`는 dry-run/1-step이 아니다. 실제 학습과 pilot 지표 기록이며 기본 max10/patience3가 적용된다. ModernBERT trainer는 이 문서에서 BF16/gradient checkpointing이 구현됐다고 가정하지 않는다. 기본 batch8/length2048이 실제 40GB에서 되는지 여기서 측정한다. OOM이면 freeze **이전**에 `configs/train.yaml`의 batch를 4, accumulation을 4로 바꿔 effective16을 유지하고 새 pilot 경로로 다시 실행한다. 2×8도 같은 원칙이다. 입력 truncation >5%, evidence loss 또는 request 손실이면 공통 max_length 정책을 검토하고 모든 모델에 똑같이 적용한다. length를 늘리면 메모리도 다시 측정한다. test 성능으로 설정을 고르지 않는다.
@@ -305,11 +317,17 @@ python scripts/08_freeze.py --records "$R/splits" --output "$R/approvals/freeze.
 
 ```bash
 for MODE in A B_pred C C+; do
-  python train.py --variant "$MODE" --train "$R/splits/train.jsonl" \
+  CKPT_MODE="$MODE"
+  if [ "$MODE" = 'C+' ]; then CKPT_MODE=C_plus; fi
+  RESUME_ARGS=()
+  if [ -f "$R/checkpoints/$CKPT_MODE/seed_42/trial_0/last.pt" ]; then
+    RESUME_ARGS=(--resume "$R/checkpoints/$CKPT_MODE/seed_42/trial_0/last.pt")
+  fi
+  python train.py --variant "$MODE" "${RESUME_ARGS[@]}" --train "$R/splits/train.jsonl" \
     --validation "$R/splits/validation.jsonl" --split-version "$SPLIT_VERSION" \
     --seed 42 --device cuda --execution-mode final \
     --freeze-manifest "$R/approvals/freeze.json" \
-    --output-dir "$R/checkpoints" | tee "$R/logs/train-${MODE}.txt"
+    --output-dir "$R/checkpoints" | tee -a "$R/logs/train-${MODE}.txt"
 done
 ```
 
@@ -319,7 +337,7 @@ done
 
 ```bash
 # Qwen 8B 서버가 종료된 상태. 라벨 수집과 동일한 Target revision을 사용한다.
-python scripts/04_export_target_pregen.py --config configs/baselines.yaml \
+python scripts/04_export_target_pregen.py --resume --config configs/baselines.yaml \
   | tee "$R/logs/p1-activations.txt"
 python -m src.evaluation.baselines_pre --config configs/baselines.yaml \
   | tee "$R/logs/g1.txt"
@@ -334,7 +352,7 @@ P1은 Target 응답 후 feature가 아니라 응답 생성 전 중간층 마지�
 ```bash
 mkdir -p "$R/predictions"
 for MODE in A B_pred C C_plus; do
-  python export_predictions.py \
+  python export_predictions.py --resume \
     --checkpoint "$R/checkpoints/$MODE/seed_42/trial_0/best.pt" \
     --records "$R/splits" --out "$R/predictions/$MODE.jsonl" --device cuda \
     --execution-mode final \
@@ -361,7 +379,7 @@ predictions 폴더에는 위 여섯 모델의 예측만 넣는다. majority sani
 ```bash
 mkdir -p "$R/embeddings"
 for MODE in A C C_plus; do
-  python export_predictions.py \
+  python export_predictions.py --resume \
     --checkpoint "$R/checkpoints/$MODE/seed_42/trial_0/best.pt" \
     --records "$R/splits" --out "$R/embeddings/${MODE}-scores.jsonl" \
     --embeddings-out "$R/embeddings/${MODE}.jsonl" --device cuda \

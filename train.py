@@ -187,7 +187,10 @@ def save_checkpoint(path, model, optimizer, scheduler, state, metadata):
                "state": state, "metadata": metadata, "rng": rng,
                "architecture": model.architecture()}
     temporary = path.with_suffix(path.suffix + ".tmp")
-    torch.save(payload, temporary)
+    with temporary.open('wb') as stream:
+        torch.save(payload, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(temporary, path)
 
 
@@ -222,10 +225,13 @@ def _write_history(path, history, merge=False):
             previous = list(csv.DictReader(stream))
         incoming = {(str(row["run_id"]), str(row["optimizer_step"])) for row in history}
         history = [row for row in previous if (row["run_id"], row["optimizer_step"]) not in incoming] + history
-    with path.open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(history[0]))
-        writer.writeheader()
-        writer.writerows(history)
+    import io
+    from src.data.progress import atomic_text
+    stream = io.StringIO(newline='')
+    writer = csv.DictWriter(stream, fieldnames=list(history[0]))
+    writer.writeheader()
+    writer.writerows(history)
+    atomic_text(path, stream.getvalue())
 
 
 def train_model(model, train_dataset, validation_dataset, collator, config, metadata,

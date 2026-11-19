@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 from src.data.mutations import make_variants, apply_holdout_plan
 from src.data.generation import QwenClient, execute, validate_controlled_family
 from src.data.batch import read_items, warning
+from src.data.progress import Journal, signature, atomic_text, append_json
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -22,6 +23,7 @@ def main():
     parser.add_argument('--model')
     parser.add_argument('--revision', help='Immutable serving Qwen commit; checked against the running server')
     parser.add_argument('--source-audit', type=Path, help='Automatic source normalization/exclusion JSONL')
+    parser.add_argument('--resume', action='store_true', help='Continue using the matching durable item journal')
     parser.add_argument('--key-env', default='QWEN_API_KEY')
     parser.add_argument('--limit-seeds', type=int, default=20)
     parser.add_argument('--output', type=Path)
@@ -44,8 +46,13 @@ def main():
     args.audit = args.audit or ROOT/Path(config['seed_setup']['inventory']).parent/'generation_audit.csv'
     args.source_audit = args.source_audit or args.audit.with_suffix('.source.jsonl')
     args.input = args.input or ROOT/config['paths']['annotated']/config.get('canonical_filename', 'canonical_seed.jsonl')
-    if args.output.exists() or args.audit.exists() or args.source_audit.exists():
+    progress_path = args.output.with_suffix('.progress.jsonl')
+    if (args.output.exists() or args.audit.exists() or args.source_audit.exists()) and not (args.resume and progress_path.exists()):
         parser.error('Existing generation/audit artifacts are preserved; provide new --output and --audit paths')
+    fingerprint = signature({k:v for k,v in vars(args).items() if k != 'resume'},
+        [args.input, args.config, args.holdout_plan, args.annotations, args.reviews,
+         *sorted((ROOT/'prompts').glob('*.*')), *sorted((ROOT/'src/data').glob('*.py')), Path(__file__)])
+    journal = Journal(progress_path, fingerprint, resume=args.resume)
     if bool(args.endpoint) != bool(args.model):
         parser.error('--endpoint and --model must be provided together')
     if args.limit_seeds < 1:
@@ -57,6 +64,9 @@ def main():
             parser.error(str(exc))
     source_audit = []
     seeds = read_items(args.input, source_audit, required=('seed_id', 'group_id'))
+    def audit_add(finding):
+        source_audit.append(finding)
+        atomic_text(args.source_audit, ''.join(json.dumps(r, ensure_ascii=False)+'\n' for r in source_audit))
     enabled = []
     for seed in seeds:
         try:
@@ -64,7 +74,7 @@ def main():
                 raise ValueError('Disabled source')
         except Exception as exc:
             finding = dict(seed_id=seed['seed_id'], status='excluded', reason='source_selection:'+type(exc).__name__)
-            source_audit.append(finding)
+            audit_add(finding)
             warning('source', seed['seed_id'], finding['reason'])
             continue
         enabled.append(seed)
@@ -99,19 +109,19 @@ def main():
         if automatic:
             from src.data.automatic import create_seed, SourceExcluded
             try:
-                seed = create_seed(seed, client)
-                source_audit.append(dict(seed_id=seed['seed_id'], status='normalized',
+                seed = journal.run('normalize:'+seed['seed_id'], lambda: create_seed(seed, client))
+                audit_add(dict(seed_id=seed['seed_id'], status='normalized',
                     normalization=seed['source_normalization']))
             except SourceExcluded as exc:
                 finding = {'seed_id':seed['seed_id'], 'record_hash':seed.get('source_provenance',{}).get('record_hash'),
                            'status':'excluded', **exc.audit}
-                source_audit.append(finding)
+                audit_add(finding)
                 scenario_errors.append(finding)
                 warning('normalization', seed['seed_id'], finding['reason'])
                 continue
             except Exception as exc:
                 finding = dict(seed_id=seed['seed_id'], status='excluded', reason='normalization:'+type(exc).__name__)
-                source_audit.append(finding)
+                audit_add(finding)
                 scenario_errors.append(finding)
                 warning('normalization', seed['seed_id'], finding['reason'])
                 continue
@@ -131,7 +141,7 @@ def main():
                 selected.append(variants)
         except Exception as exc:
             finding = dict(seed_id=seed['seed_id'], status='excluded', reason='preparation:'+type(exc).__name__)
-            source_audit.append(finding)
+            audit_add(finding)
             scenario_errors.append(finding)
             warning('preparation', seed['seed_id'], finding['reason'])
     random.Random(42).shuffle(selected)
@@ -144,7 +154,14 @@ def main():
     from src.data.fewshots import load_fewshots, expression_audit, check_fewshot_overlap
     from src.data.splitting import DEFAULT_TEMPLATES
     shots = load_fewshots(ROOT/'prompts/naturalization_shots.json', DEFAULT_TEMPLATES)
-    records = [execute(v, client, ROOT / 'prompts') for variants in selected for v in variants]
+    records = []
+    atomic_text(args.output, '')
+    for variants in selected:
+        for variant in variants:
+            record = journal.run('generate:'+variant['sample_id'], lambda: execute(variant, client, ROOT/'prompts'))
+            records.append(record)
+            # A restart rebuilds this view from the durable journal without calling Qwen again.
+            append_json(args.output, record)
     # 같은 seed에서 나온 base와 variant는 생성에 실패한 항목도 함께 남긴다.
     for record in records:
         try:
@@ -182,7 +199,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     for record in records:
         record['manual_review_selected'] = False
-    output.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in records), encoding='utf-8')
+    atomic_text(output, ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in records))
     audit = args.audit
     audit.parent.mkdir(parents=True, exist_ok=True)
     fields = ['row_type','sample_id','capability_id','group_id','variant_group_id','generation_status','validation_status','errors','manual_review_selected','oracle_relation_status','N_structured','N_attempted','N_generated','N_validated','generation_success_rate','validation_yield','controlled_family_status']
