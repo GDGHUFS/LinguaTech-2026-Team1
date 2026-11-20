@@ -1,0 +1,13 @@
+revision: eval-v1
+model_registry: configs/model_registry.yaml
+frozen: false
+models: [G1, P1, A, B_pred, C, C+]
+seeds: [42]
+experiment_mode: single_seed
+calibration: none
+threshold_policy: validation_max_f1_highest_threshold
+relevance_threshold: 0.5
+ece_bins: 10
+bootstrap_repetitions: 2000
+bootstrap_seed: 42
+bootstrap_min_valid_fraction: 0.8
