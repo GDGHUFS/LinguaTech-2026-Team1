@@ -121,6 +121,9 @@ class QwenClient:
 
     def complete_json(self, prompt, schema):
         """Constrained finite-language JSON on CPU; native JSON Schema on vLLM."""
+        if self.endpoint == 'transformers://cpu' and set(schema.get('properties',{})) != {'text'}:
+            raise ValueError('CPU structured decoding supports single_policy_turn only; '
+                'use --paraphrase-scope single_policy_turn or a vLLM endpoint')
         before = self.verify_revision()
         if self.endpoint == 'transformers://cpu':
             import torch

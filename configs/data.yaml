@@ -5,6 +5,7 @@ synthetic_policy_purpose: confidential discussion
 dialogue_generation: guarded_v1
 variant_policy: coverage_v1
 qwen_paraphrase_attempts: 1
+qwen_paraphrase_scope: all_policy_turns
 free_generation: false
 status: camber_automatic
 finalized: null

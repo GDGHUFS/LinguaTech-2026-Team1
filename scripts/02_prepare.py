@@ -31,6 +31,8 @@ def main():
     parser.add_argument('--limit-generate-seeds', type=int, help='Pilot only: normalize all selected sources but naturalize only this many source families')
     parser.add_argument('--limit-dialogues', type=int, help='Pilot only: cap actual naturalization calls; retain all planned variants as not-run records')
     parser.add_argument('--paraphrase-budget', type=int, help='Guarded mode: at most this many dialogues use Qwen; others remain verified templates')
+    parser.add_argument('--paraphrase-scope', choices=('single_policy_turn','all_policy_turns'),
+        help='Guarded wording coverage; defaults to all_policy_turns (one batched request per dialogue)')
     parser.add_argument('--accepted-output', type=Path, help='Only verified Gold-labelled records, written incrementally')
     parser.add_argument('--normalized-output', type=Path, help='Verified source records reusable without a model')
     parser.add_argument('--template-only', action='store_true', help='Guarded templates only; offline mode requires previously verified normalized sources')
@@ -44,6 +46,14 @@ def main():
     config = yaml.safe_load(args.config.read_text(encoding='utf-8'))
     automatic = config.get('generation_mode') == 'camber_automatic'
     guarded = config.get('dialogue_generation') == 'guarded_v1'
+    if args.paraphrase_scope is not None and not guarded:
+        parser.error('--paraphrase-scope requires guarded_v1')
+    args.paraphrase_scope = args.paraphrase_scope or config.get('qwen_paraphrase_scope','all_policy_turns')
+    if args.paraphrase_scope not in ('single_policy_turn','all_policy_turns'):
+        parser.error('Unsupported qwen_paraphrase_scope')
+    if (guarded and args.endpoint == 'transformers://cpu' and args.paraphrase_scope == 'all_policy_turns'
+            and args.paraphrase_budget != 0 and not args.template_only):
+        parser.error('CPU decoding requires --paraphrase-scope single_policy_turn; all_policy_turns requires vLLM')
     if guarded and config.get('free_generation',False):
         parser.error('Free generation is not supported by the verified closed grammar')
     if guarded and args.limit_dialogues is not None:
@@ -221,6 +231,7 @@ def main():
                     variant['holdout_plan'] = holdout_plan
                     if guarded:
                         variant['paraphrase_attempt_limit'] = config.get('qwen_paraphrase_attempts',1)
+                        variant['paraphrase_scope'] = args.paraphrase_scope
                 selected.append(variants)
                 emit(diagnostic(seed, 'synthetic_policy', 'passed'))
             except Exception as exc:
@@ -236,7 +247,7 @@ def main():
     shots = load_fewshots(ROOT/'prompts/naturalization_shots.json', DEFAULT_TEMPLATES)
     records = []
     qwen_used = 0
-    fields = ['row_type','sample_id','capability_id','group_id','variant_group_id','generation_status','validation_status','errors','manual_review_selected','oracle_relation_status','N_structured','N_attempted','N_generated','N_validated','generation_success_rate','validation_yield','controlled_family_status','generation_method','fallback_used','qwen_validation_status','N_qwen_attempted','N_qwen_verified','N_fallback','qwen_success_rate','fallback_rate']
+    fields = ['row_type','sample_id','capability_id','group_id','variant_group_id','generation_status','validation_status','errors','manual_review_selected','oracle_relation_status','N_structured','N_attempted','N_generated','N_validated','generation_success_rate','validation_yield','controlled_family_status','generation_method','fallback_used','qwen_validation_status','N_qwen_attempted','N_qwen_verified','N_fallback','qwen_success_rate','fallback_rate','paraphrase_scope','paraphrase_coverage']
     args.audit.parent.mkdir(parents=True, exist_ok=True)
     with args.audit.open('w', encoding='utf-8', newline='') as stream:
         csv.DictWriter(stream, fieldnames=fields).writeheader()
@@ -346,7 +357,11 @@ def main():
                 'N_qwen_attempted':model_attempted,'N_qwen_verified':model_valid,'N_fallback':fallback,
                 'qwen_success_rate':model_valid/model_attempted if model_attempted else None,
                 'fallback_rate':fallback/model_attempted if model_attempted else None})
-    print(json.dumps({'eligible_seed_pool':len(seeds), 'selected_seeds':len(selected),'scenario_errors':scenario_errors,'structured_records':len(records),'qwen_executed':client is not None,'experiment':{'training_seeds':[42],'single_seed_experiment':True},'expression_audit':expression_audit(records),'oracle_relation_status':'pending'}))
+    coverage = dict(
+        eligible_policy_turns=sum(len(r.get('paraphrase_coverage',{}).get('eligible_turn_ids',[])) for r in records),
+        changed_policy_turns=sum(len(r.get('paraphrase_coverage',{}).get('changed_turn_ids',[])) for r in records),
+        fallback_dialogues=sum(bool(r.get('fallback_used')) for r in records))
+    print(json.dumps({'eligible_seed_pool':len(seeds), 'selected_seeds':len(selected),'scenario_errors':scenario_errors,'structured_records':len(records),'qwen_executed':client is not None,'experiment':{'training_seeds':[42],'single_seed_experiment':True},'expression_audit':expression_audit(records),'paraphrase_coverage':coverage,'oracle_relation_status':'pending'}))
 
 if __name__ == '__main__':
     main()

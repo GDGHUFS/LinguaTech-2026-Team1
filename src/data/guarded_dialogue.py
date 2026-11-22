@@ -328,7 +328,26 @@ def verify(sample, dialogue):
         plan_hash=plan['plan_hash'] if plan else None)
 
 
-def paraphrase_request(plan):
+def paraphrase_request(plan, scope='single_policy_turn'):
+    if scope == 'all_policy_turns':
+        indices = [i for i,m in plan['meanings'].items()
+            if m['kind'] in ('initial_rule','operation') and len(plan['allowed'][i])>1]
+        if not indices:
+            return None
+        properties = {str(i):dict(type='string',enum=[text for text in plan['allowed'][i]
+            if text != plan['dialogue']['turns'][i]['text']]) for i in indices}
+        schema = dict(type='object',properties=dict(turns=dict(type='object',
+            properties=properties,required=list(properties),additionalProperties=False)),
+            required=['turns'],additionalProperties=False)
+        prompt = ('Select a different approved wording for EVERY listed policy turn. '
+            'Do not make a policy judgment or change facts, permissions, conditions or chronology. '
+            'Return JSON with exactly one key turns, mapping each listed turn ID to one of its '
+            'approved alternatives. Do not omit or add turns.\n'+json.dumps([
+                dict(turn_id=str(i),original=plan['dialogue']['turns'][i]['text'],
+                     alternatives=properties[str(i)]['enum']) for i in indices],ensure_ascii=False))
+        return indices,prompt,schema
+    if scope != 'single_policy_turn':
+        raise ValueError('unsupported_paraphrase_scope')
     # One policy utterance per model call. No ID, mapping, label or final request is requested.
     candidates = [i for i,m in plan['meanings'].items() if m['kind']=='operation' and len(plan['allowed'][i])>1]
     if not candidates:
@@ -343,6 +362,35 @@ def paraphrase_request(plan):
         'Return only JSON with one key text, containing exactly one approved alternative.\n'
         'Original utterance: '+original+'\nApproved alternatives: '+json.dumps(alternatives,ensure_ascii=False))
     return index,prompt,schema
+
+
+def paraphrase_candidate(plan, selected, parsed):
+    """Apply only the exact turn set and finite alternatives requested from the model."""
+    index,_,schema = selected
+    candidate = deepcopy(plan['dialogue'])
+    if isinstance(index,list):
+        properties = schema['properties']['turns']['properties']
+        if (not isinstance(parsed,dict) or set(parsed)!={'turns'}
+                or not isinstance(parsed['turns'],dict) or set(parsed['turns'])!=set(properties)):
+            raise ValueError('qwen_output_outside_closed_grammar')
+        for key,field in properties.items():
+            if not isinstance(parsed['turns'][key],str) or parsed['turns'][key] not in field['enum']:
+                raise ValueError('qwen_output_outside_closed_grammar')
+            candidate['turns'][int(key)]['text'] = parsed['turns'][key]
+    else:
+        if (not isinstance(parsed,dict) or set(parsed)!={'text'}
+                or not isinstance(parsed['text'],str) or parsed['text'] not in schema['properties']['text']['enum']):
+            raise ValueError('qwen_output_outside_closed_grammar')
+        candidate['turns'][index]['text'] = parsed['text']
+    return candidate
+
+
+def paraphrase_coverage(plan, dialogue, scope):
+    eligible = [i for i,m in plan['meanings'].items()
+        if m['kind'] in ('initial_rule','operation') and len(plan['allowed'][i])>1]
+    changed = [i for i in eligible
+        if dialogue['turns'][i]['text'] != plan['dialogue']['turns'][i]['text']]
+    return dict(scope=scope,eligible_turn_ids=eligible,changed_turn_ids=changed)
 
 
 def execute(sample, client, attempts=1):
@@ -370,7 +418,8 @@ def execute(sample, client, attempts=1):
         record.update(errors=baseline_proof['errors'],failure_reason=baseline_proof['errors'],
             policy_validation=baseline_proof)
         return record
-    selected = paraphrase_request(plan)
+    scope = trace.get('paraphrase_scope','single_policy_turn')
+    selected = paraphrase_request(plan,scope)
     if client is not None and selected and attempts:
         index,prompt,schema = selected
         for _ in range(attempts):
@@ -383,16 +432,13 @@ def execute(sample, client, attempts=1):
                 if getattr(client,'stage_callback',None):
                     client.stage_callback(trace,'qwen_paraphrase',raw)
                 parsed = model_json(raw)
-                if (not isinstance(parsed,dict) or set(parsed)!={'text'} or
-                        parsed['text'] not in schema['properties']['text']['enum']):
-                    raise ValueError('qwen_output_outside_closed_grammar')
-                candidate = deepcopy(output)
-                candidate['turns'][index]['text'] = parsed['text']
+                candidate = paraphrase_candidate(plan,selected,parsed)
                 proof = verify(trace,candidate)
                 if proof['status']!='VERIFIED':
                     raise ValueError('qwen_meaning_unverified')
                 output = candidate
-                attempt.update(validation_status='VERIFIED',turn_id=index)
+                attempt.update(validation_status='VERIFIED')
+                attempt['turn_ids' if isinstance(index,list) else 'turn_id'] = index
                 record['generation_method'] = 'qwen_paraphrase'
                 record['qwen_validation_status'] = 'VERIFIED'
             except Exception as exc:
@@ -427,6 +473,8 @@ def execute(sample, client, attempts=1):
         diagnostics=[diagnostic(trace,'closed_grammar_validation','passed')])
     # Preserve the complete deterministic evidence instead of inventing model confidence.
     record['semantic_validation'] = deepcopy(proof)
+    if 'paraphrase_scope' in trace:
+        record['paraphrase_coverage'] = paraphrase_coverage(plan,output,scope)
     return record
 
 
@@ -445,6 +493,8 @@ def validate_record(record):
         'scope_intervention_provenance','hypothetical_initial_scopes','holdout_plan','holdout_plan_hash')
     if any(record.get(key)!=trace.get(key) for key in immutable):
         raise ValueError('immutable_symbolic_metadata_changed')
+    if record.get('paraphrase_scope') != trace.get('paraphrase_scope'):
+        raise ValueError('paraphrase_scope_changed')
     if trace.get('holdout_plan') is not None and trace.get('holdout_plan_hash')!=content_hash(trace['holdout_plan']):
         raise ValueError('holdout_plan_hash_changed')
     if trace.get('generation_architecture')!=ARCHITECTURE or record.get('generation_architecture')!=ARCHITECTURE:
@@ -467,7 +517,10 @@ def validate_record(record):
         raise ValueError('generation_execution_contract_changed')
     if len(attempts)>3:
         raise ValueError('unbounded_paraphrase_retries')
-    selected = paraphrase_request(plan)
+    scope = trace.get('paraphrase_scope','single_policy_turn')
+    selected = paraphrase_request(plan,scope)
+    if 'paraphrase_scope' in trace and record.get('paraphrase_coverage')!=paraphrase_coverage(plan,dialogue,scope):
+        raise ValueError('paraphrase_coverage_changed')
     accepted = []
     for attempt in attempts:
         index,prompt,schema = selected
@@ -479,10 +532,9 @@ def validate_record(record):
             if execution.get('model_id')!=attempt['serving_provenance']['model_id']:
                 raise ValueError('paraphrase_model_identity_changed')
             parsed = model_json(attempt['raw'])
-            if set(parsed)!={'text'} or parsed['text'] not in schema['properties']['text']['enum']:
-                raise ValueError('unverified_paraphrase_accepted')
-            candidate = deepcopy(plan['dialogue'])
-            candidate['turns'][index]['text'] = parsed['text']
+            if attempt.get('turn_ids' if isinstance(index,list) else 'turn_id') != index:
+                raise ValueError('paraphrase_turn_mapping_changed')
+            candidate = paraphrase_candidate(plan,selected,parsed)
             accepted.append(candidate)
     if record.get('generation_method')=='qwen_paraphrase':
         if not accepted or dialogue!=accepted[-1] or record.get('fallback_used') or record.get('qwen_validation_status')!='VERIFIED':

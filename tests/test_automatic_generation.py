@@ -43,6 +43,9 @@ class QwenTransport:
 
     def complete_json(self, prompt, schema):
         self.prompts.append(prompt)
+        if set(schema['properties']) == {'turns'}:
+            return json.dumps(dict(turns={key:field['enum'][0]
+                for key,field in schema['properties']['turns']['properties'].items()}))
         return json.dumps(dict(text=schema['properties']['text']['enum'][0]))
 
     def complete(self, prompt):
