@@ -149,6 +149,19 @@ class Sample(Contract):
     annotation: dict[str, Any] | None = None
     source_motive: dict[str, Any] | None = None
     disclosure_purpose: dict[str, Any] | None = None
+    purpose_provenance: dict[str, Any] | None = None
+    generation_architecture: str | None = None
+    policy_turn_plan: dict[str, Any] | None = None
+    dialogue_plan_hash: str | None = None
+    generation_method: Literal['template','qwen_paraphrase'] | None = None
+    fallback_used: bool | None = None
+    failure_reason: list[str] = Field(default_factory=list)
+    qwen_attempts: list[dict[str, Any]] = Field(default_factory=list)
+    qwen_validation_status: str | None = None
+    policy_validation_status: str | None = None
+    policy_validation: dict[str, Any] | None = None
+    gold_training_eligible: bool = False
+    failure_prediction_training_eligible: bool = False
     source_checks: dict[str, Any] | None = None
     policy_temporal_boundary: dict[str, Any] | None = None
     transformation_notes: list[NonEmpty]

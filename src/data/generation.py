@@ -5,6 +5,35 @@ import hashlib
 import urllib.request
 from copy import deepcopy
 
+GENERATION_TASK_SUFFIX = ('\nEND INPUT JSON\nGenerate ONLY the dialogue for this INPUT, not an example. '
+    'Use its actual actors, information, purpose, initial rule IDs and operation IDs in the output mappings. '
+    'Do not answer the source appropriateness question. Return only the requested dialogue JSON.')
+VALIDATION_TASK_SUFFIX = ('\nEND INPUT JSON\nReturn only the semantic-validation JSON with all required checks '
+    'and verbatim evidence. Compare this dialogue to its trace and original history; do not answer the disclosure request.')
+
+
+def generation_prompt(template, examples, sample):
+    """Retained legacy path: prompt and replay use identical format requirements."""
+    request = ('must' if sample.get('request_style') == 'question_embedding' else 'must NOT')
+    requirements = ('OUTPUT REQUIREMENTS: turns contains 4 to 12 turns with consecutive turn_id '
+        '0, 1, 2, ... . The last turn has role user; final_request equals its text exactly. '
+        'final_request '+request+' start with "What would happen if".')
+    return (template+'\n'+requirements+'\nSEVEN SYNTHETIC EXAMPLES:\n'+
+        json.dumps(examples['shots'],ensure_ascii=False)+'\nINPUT JSON:\n'+
+        json.dumps(naturalization_input(sample),ensure_ascii=False)+GENERATION_TASK_SUFFIX)
+
+
+def validation_prompt(template, sample, dialogue):
+    from src.data.validators import semantic_requirements
+    required, needed = semantic_requirements(sample)
+    requirements = 'OUTPUT REQUIREMENTS: return exactly these top-level keys: '+json.dumps(sorted(required))+'. '
+    requirements += ('checks contains exactly these keys: '+json.dumps(needed)+
+        '. Each check requires passed, rationale, and evidence [{turn_id, quote}]; '
+        'quotes must be verbatim from that turn.' if needed else 'Do not include checks.')
+    return (template+'\n'+requirements+'\nINPUT JSON:\n'+
+        json.dumps(dict(structured_trace=naturalization_input(sample),dialogue=dialogue),ensure_ascii=False)+
+        VALIDATION_TASK_SUFFIX)
+
 class QwenClient:
     """Qwen의 chat completions API를 호출한다. 생성과 의미 검증에 같은 client를 사용한다."""
     def __init__(self, endpoint, model, key_env='QWEN_API_KEY', revision=None):
@@ -14,9 +43,42 @@ class QwenClient:
         self.key = os.environ.get(key_env)
         self.key_env = key_env
         self.revision = revision
+        self.max_tokens = 1024 if self.endpoint == 'transformers://cpu' else 4096
         self.serving_provenance = {'status': 'NOT VERIFIED'}
 
+    def _load_cpu(self):
+        """Run the same prompts and validators for a small real CPU diagnostic."""
+        import re
+        from pathlib import Path
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from src.utils.reproducibility import file_hash, content_hash, seed_everything
+        if not re.fullmatch(r'[0-9a-f]{40}', self.revision or ''):
+            raise ValueError('Immutable CPU model revision required')
+        seed_everything(42, include_torch=True)
+        torch.set_num_threads(4)
+        cache = Path(__file__).resolve().parents[2]/'outputs/model-cache'
+        snapshot = cache/('models--'+self.model.replace('/', '--'))/'snapshots'/self.revision
+        # A local path also prevents optional tokenizer heuristics from contacting the Hub.
+        self.tokenizer = AutoTokenizer.from_pretrained(str(snapshot), local_files_only=True)
+        self.cpu_model = AutoModelForCausalLM.from_pretrained(self.model, revision=self.revision,
+            cache_dir=str(cache), local_files_only=True, dtype=torch.float32).eval()
+        evidence = dict(model=self.model, revision=self.revision, tokenizer_revision=self.revision,
+            loaded_config_commit=self.cpu_model.config._commit_hash,
+            runtime='transformers_cpu', torch_version=torch.__version__, seed=42,
+            quantization='none', max_new_tokens=self.max_tokens, max_normalization_tokens=256,
+            snapshot_hashes={p.name:file_hash(p) for p in sorted(snapshot.iterdir()) if p.is_file()})
+        self.serving_provenance = dict(status='local_loaded_snapshot', model_id=self.model,
+            model_revision=self.revision, endpoint=self.endpoint, evidence=evidence,
+            evidence_hash=content_hash(evidence))
+
     def verify_revision(self):
+        if self.endpoint == 'transformers://cpu':
+            if not hasattr(self, 'cpu_model'):
+                self._load_cpu()
+            from src.data.serving import validate_serving
+            validate_serving(self.serving_provenance)
+            return self.serving_provenance
         from src.data.serving import server_provenance
         from urllib.parse import urlsplit, urlunsplit
         url = urlsplit(self.endpoint)
@@ -34,7 +96,17 @@ class QwenClient:
 
     def complete(self, prompt):
         before = self.verify_revision()
-        payload = {'model': self.model, 'temperature': 0, 'max_tokens': 4096,
+        if self.endpoint == 'transformers://cpu':
+            import torch
+            text = self.tokenizer.apply_chat_template([dict(role='user', content=prompt)],
+                tokenize=False, add_generation_prompt=True, enable_thinking=False)
+            inputs = self.tokenizer(text, return_tensors='pt')
+            with torch.inference_mode():
+                output = self.cpu_model.generate(**inputs, do_sample=False,
+                    max_new_tokens=256 if prompt.startswith('Normalize') else self.max_tokens,
+                    pad_token_id=self.tokenizer.eos_token_id)
+            return self.tokenizer.decode(output[0, inputs['input_ids'].shape[1]:], skip_special_tokens=True).strip()
+        payload = {'model': self.model, 'temperature': 0, 'seed':42, 'max_tokens': 4096,
                    'messages': [{'role': 'user', 'content': prompt}],
                    'response_format': {'type': 'json_object'}}
         headers = {'Content-Type': 'application/json'}
@@ -47,6 +119,47 @@ class QwenClient:
             raise ValueError('Generation serving revision changed during request')
         return envelope['choices'][0]['message']['content']
 
+    def complete_json(self, prompt, schema):
+        """Constrained finite-language JSON on CPU; native JSON Schema on vLLM."""
+        before = self.verify_revision()
+        if self.endpoint == 'transformers://cpu':
+            import torch
+            choices = schema.get('properties',{}).get('text',{}).get('enum')
+            if not choices or set(schema.get('properties',{})) != {'text'}:
+                raise ValueError('CPU structured decoding requires a finite text enum')
+            responses = [json.dumps(dict(text=text),ensure_ascii=False,separators=(',',':')) for text in choices]
+            sequences = [self.tokenizer.encode(text,add_special_tokens=False) for text in responses]
+            chat = self.tokenizer.apply_chat_template([dict(role='user',content=prompt)],
+                tokenize=False,add_generation_prompt=True,enable_thinking=False)
+            inputs = self.tokenizer(chat,return_tensors='pt')
+            length = inputs['input_ids'].shape[1]
+            eos = self.tokenizer.eos_token_id
+            def allowed(batch_id, ids):
+                prefix = ids[length:].tolist()
+                result = {seq[len(prefix)] if len(prefix)<len(seq) else eos for seq in sequences
+                    if seq[:len(prefix)] == prefix}
+                if not result:
+                    raise ValueError('No valid structured-decoding continuation')
+                return sorted(result)
+            with torch.inference_mode():
+                output = self.cpu_model.generate(**inputs,do_sample=False,
+                    max_new_tokens=min(self.max_tokens,max(map(len,sequences))+1),
+                    prefix_allowed_tokens_fn=allowed,pad_token_id=eos)
+            return self.tokenizer.decode(output[0,length:],skip_special_tokens=True).strip()
+        payload = dict(model=self.model,temperature=0,seed=42,max_tokens=self.max_tokens,
+            messages=[dict(role='user',content=prompt)],response_format=dict(type='json_schema',
+                json_schema=dict(name='bounded_policy_paraphrase',strict=True,schema=schema)))
+        headers = {'Content-Type':'application/json'}
+        if self.key:
+            headers['Authorization'] = 'Bearer '+self.key
+        request = urllib.request.Request(self.endpoint+'/chat/completions',
+            data=json.dumps(payload).encode(),headers=headers)
+        with urllib.request.urlopen(request,timeout=180) as response:
+            envelope = json.load(response)
+        if self.verify_revision()!=before:
+            raise ValueError('Serving revision changed')
+        return envelope['choices'][0]['message']['content']
+
 
 def validate_controlled_family(family):
     """전달된 family를 직접 갱신해 base와 INVARIANT 항목의 판단·상태·요청을 비교한다.
@@ -54,6 +167,7 @@ def validate_controlled_family(family):
     base가 없거나 oracle 검증이 미완료면 pending으로 둔다. 다른 관계 유형에 대해 판단 변경을 강제하지는 않는다."""
     base = next((r for r in family if r.get('variant_id') == 'base'), None)
     from src.data.validators import validate_capability
+    guarded = all(r.get('generation_architecture')=='guarded_v1' for r in family)
     ready = base is not None and all(r.get('oracle_verified') is True for r in family)
     for record in family:
         trace = record.get('structured_trace') or record
@@ -85,9 +199,9 @@ def validate_controlled_family(family):
             record['oracle_relation_status'] = 'failed'
             record['validation_status'] = 'rejected'
             record.setdefault('errors', []).extend(errors)
-        elif not ready:
+        elif not (record.get('oracle_verified') is True and (base is None or base.get('oracle_verified') is True) if guarded else ready):
             record['oracle_relation_status'] = 'pending'
-        elif record.get('expected_gold_relation') == 'INVARIANT' and any(record[k] != base[k] for k in ('gold_decision','gold_state','request')):
+        elif base and record.get('expected_gold_relation') == 'INVARIANT' and any(record[k] != base[k] for k in ('gold_decision','gold_state','request')):
             record['oracle_relation_status'] = 'failed'
             record['validation_status'] = 'rejected'
             record['errors'].append('controlled_invariance_violation')
@@ -96,12 +210,16 @@ def validate_controlled_family(family):
 
 
 def naturalization_input(sample):
-    payload = deepcopy(sample)
+    # Keep task facts and the complete policy trace; audit hashes and duplicate story
+    # copies belong in the saved record, not in the model's transformation input.
+    keys = ('sample_id','capability_id','request_style','initial_rules','operation_trace','request',
+            'source_facts','policy_temporal_boundary','purpose_provenance')
+    payload = {k:deepcopy(sample[k]) for k in keys if k in sample}
     if sample.get('source_normalization'):
         from src.data.automatic import source_scenario
         payload['source_scenario'] = source_scenario(sample)
-        for key in ('source_record', 'source_appropriateness_label'):
-            payload.pop(key, None)
+    elif sample.get('policy_context'):
+        payload['policy_context'] = deepcopy(sample['policy_context'])
     return payload
 
 
@@ -109,6 +227,9 @@ def execute(sample, client, prompt_dir):
     """Record any item-level failure, including structure validation errors."""
     from src.data.batch import warning
     try:
+        if sample.get('generation_architecture') == 'guarded_v1':
+            from src.data.guarded_dialogue import execute as guarded_execute
+            return guarded_execute(sample,client,sample.get('paraphrase_attempt_limit',1))
         record = _execute(sample, client, prompt_dir)
     except Exception as exc:
         record = dict(sample, structured_trace=deepcopy(sample), turns=None,
@@ -117,6 +238,23 @@ def execute(sample, client, prompt_dir):
                       errors=['execution:'+type(exc).__name__])
     if record.get('errors'):
         warning('generation', sample.get('sample_id'), record['errors'])
+    from src.data.batch import diagnostic
+    if any(code.startswith('oracle:') for code in record.get('errors', [])):
+        stage, status = 'dialogue_oracle', 'failed'
+    elif record.get('validation_status') == 'semantic_pass_oracle_verified':
+        stage, status = 'semantic_validation', 'passed'
+    elif record.get('generation_status') == 'generated':
+        stage, status = 'semantic_validation', 'failed'
+    elif record.get('generation_status') == 'invalid_structure':
+        stage, status = 'rule_engine', 'failed'
+    else:
+        stage, status = 'generation', 'failed'
+    record['diagnostics'] = []
+    if record.get('structured_oracle'):
+        record['diagnostics'].append(diagnostic(record, 'rule_engine', 'passed'))
+    if record.get('generation_status') == 'generated':
+        record['diagnostics'].append(diagnostic(record, 'generation', 'passed'))
+    record['diagnostics'] += [diagnostic(record, stage, status, code) for code in record.get('errors', []) or [None]]
     return record
 
 
@@ -142,7 +280,8 @@ def _execute(sample, client, prompt_dir):
         return record
     if client is None:
         return record
-    record['execution'] = {'model_id': client.model, 'endpoint': client.endpoint, 'temperature': 0, 'max_tokens': 4096}
+    record['execution'] = {'model_id': client.model, 'endpoint': client.endpoint, 'temperature': 0,
+        'max_tokens': getattr(client, 'max_tokens', 4096), 'seed':42, 'serving_provenance':deepcopy(getattr(client, 'serving_provenance', {}))}
     stage = 'generation'
     try:
         template = (prompt_dir / 'generation.txt').read_text(encoding='utf-8-sig')
@@ -153,11 +292,14 @@ def _execute(sample, client, prompt_dir):
         record['execution']['fewshot_template_families'] = [s['template_family_id'] for s in examples['shots']]
         record['execution']['shots_hash'] = hashlib.sha256(json.dumps(examples, sort_keys=True).encode()).hexdigest()
         generation_input = naturalization_input(sample)
-        prompt = template + '\nSEVEN SYNTHETIC EXAMPLES:\n' + json.dumps(examples['shots'], ensure_ascii=False) + '\nINPUT JSON:\n' + json.dumps(generation_input, ensure_ascii=False)
+        prompt = generation_prompt(template, examples, sample)
         record['execution']['generation_prompt_hash'] = hashlib.sha256(prompt.encode()).hexdigest()
         raw = client.complete(prompt)
         record['generation_raw'] = raw
-        output = json.loads(raw)
+        if getattr(client, 'stage_callback', None):
+            client.stage_callback(sample, 'generation', raw)
+        from src.data.batch import model_json
+        output = model_json(raw)
         record['errors'] = validate_dialogue(output, sample)
         if record['errors']:
             record['generation_status'] = 'invalid_dialogue'
@@ -166,19 +308,24 @@ def _execute(sample, client, prompt_dir):
                       request_turn_id=output['turns'][-1]['turn_id'], generation_status='generated')
         stage = 'validation'
         template = (prompt_dir / 'validation.txt').read_text(encoding='utf-8-sig')
-        prompt = template + '\nINPUT JSON:\n' + json.dumps({'structured_trace': generation_input, 'dialogue': output}, ensure_ascii=False)
+        prompt = validation_prompt(template, sample, output)
         record['execution']['validation_prompt_hash'] = hashlib.sha256(prompt.encode()).hexdigest()
         raw = client.complete(prompt)
         record['validation_raw'] = raw
+        if getattr(client, 'stage_callback', None):
+            client.stage_callback(sample, 'semantic_validation', raw)
         if sample.get('source_normalization'):
             record['execution']['serving_provenance'] = deepcopy(client.serving_provenance)
-        result = json.loads(raw)
+        result = model_json(raw)
         record['semantic_validation'] = result
         record['errors'] = validate_semantics(result, sample, output)
         if record['errors']:
             record['validation_status'] = 'rejected'
         else:
+            stage = 'oracle'
             annotated = annotate_dialogue(sample, output)
+            if any(annotated[k] != structured[k] for k in ('gold_decision','gold_state')):
+                raise ValueError('Structured/dialogue oracle decision or state mismatch')
             for key in ('gold_decision', 'gold_state', 'supporting_rule_ids', 'supporting_turn_ids',
                         'evidence_trace', 'ambiguity_flags', 'annotation_status', 'engine_version',
                         'initial_rules', 'operation_trace', 'versions', 'oracle_verified',
@@ -187,7 +334,7 @@ def _execute(sample, client, prompt_dir):
             record['validation_status'] = 'semantic_pass_oracle_verified'
     except Exception as exc:
         # 오류 메시지에 인증 정보가 들어갈 수 있어 오류 종류만 남긴다.
-        record['errors'] = [f'{stage}:{type(exc).__name__}']
+        record['errors'] = [f'{stage}:json_parse_error' if isinstance(exc, json.JSONDecodeError) else f'{stage}:{type(exc).__name__}']
         if stage == 'generation':
             record['generation_status'] = 'failed'
         else:

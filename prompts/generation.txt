@@ -6,6 +6,7 @@ RULES
 - Express each initial rule before operations that reference it.
 - Represent ADD, MODIFY, REVOKE, EXCEPTION, and REINSTATE with their exact semantic effects. NO_CHANGE must not alter policy.
 - Use only facts and permissions supported by the input. Distinguish synthetic interventions from source-origin consent.
+- purpose_provenance.origin=synthetic_policy is a later hypothetical purpose, not a source fact. Express supplied purpose, recipient and authorization explicitly in applicable policy turns. Never turn reveal_reason into permission or purpose. Do not add actors, relationships, information or original consent.
 - Use neutral acknowledgements only when needed; never add substantive conditions.
 - Leave explicitly missing request slots unresolved. Do not invent or infer their values.
 - Never derive gold decisions, policy states, or oracle relations.

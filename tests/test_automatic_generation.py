@@ -41,21 +41,22 @@ class QwenTransport:
     def verify_revision(self):
         return self.serving_provenance
 
+    def complete_json(self, prompt, schema):
+        self.prompts.append(prompt)
+        return json.dumps(dict(text=schema['properties']['text']['enum'][0]))
+
     def complete(self, prompt):
         self.prompts.append(prompt)
         assert 'fixture-label-not-input' not in prompt
         if prompt.startswith('Normalize'):
-            payload = json.loads(prompt.split('CAMBER SOURCE JSON:\n')[-1])
+            payload = json.loads(prompt.split('CAMBER SOURCE JSON:\n')[-1].partition('\nEND CAMBER SOURCE JSON')[0])
             scenario = payload['scenario']
             mapping = dict(subject='subject_agent', sender='aware_agent', recipient='oblivious_agent', data_type='detail')
             scope = {k:dict(value=scenario.get(v), path='scenario.'+v, quote=scenario.get(v), status='supported')
                      for k,v in mapping.items()}
-            supported = 'email for event coordination' in scenario['story']
-            scope['purpose'] = dict(value='event coordination' if supported else None,
-                path='scenario.story', quote='email for event coordination' if supported else '',
-                status='supported' if supported else 'unclear')
-            return json.dumps(dict(scope=scope,source_aligned=True,uncertainties=[],rationale='Offline fixture only'))
-        payload = json.loads(prompt.split('INPUT JSON:\n')[-1])
+            supported = 'email' in scenario['story']
+            return json.dumps(dict(scope=scope,source_aligned=supported,uncertainties=[],rationale='Offline fixture only'))
+        payload = json.loads(prompt.split('INPUT JSON:\n')[-1].partition('\nEND INPUT JSON')[0])
         if 'structured_trace' in payload:
             return json.dumps(semantic_fixture(payload['dialogue'], payload['structured_trace']))
         assert 'SEVEN SYNTHETIC EXAMPLES' in prompt
@@ -101,7 +102,7 @@ def test_source_story_changes_normalization_and_generation_inputs():
     assert sa['policy_context'] != sb['policy_context']
     for seed, transport in ((sa,x),(sb,y)):
         r=execute(make_variants(seed)[0],transport,ROOT/'prompts')
-        assert seed['policy_context'] in json.loads(transport.prompts[-2].split('INPUT JSON:\n')[-1])['source_scenario']['story']
+        assert seed['policy_context'] in json.loads(transport.prompts[-2].split('INPUT JSON:\n')[-1].partition('\nEND INPUT JSON')[0])['source_scenario']['story']
         assert r['execution']['shot_count'] == 7
     assert x.prompts[-2] != y.prompts[-2]
 
@@ -113,7 +114,7 @@ def test_missing_source_never_calls_qwen_or_invents_scenario():
     assert transport.prompts == []
 
 
-@pytest.mark.parametrize('damage',['missing_purpose','motive_only','uncertain','invented_quote','hash'])
+@pytest.mark.parametrize('damage',['motive_only','uncertain','invented_quote','hash'])
 def test_uncertain_or_unsupported_source_is_excluded(damage):
     seed=canonical(); transport=QwenTransport()
     if damage in ('missing_purpose','motive_only'):
@@ -123,8 +124,8 @@ def test_uncertain_or_unsupported_source_is_excluded(damage):
     def reply(prompt):
         result=json.loads(original(prompt))
         if damage=='uncertain':result['uncertainties']=['recipient role unresolved']
-        if damage=='invented_quote':result['scope']['purpose']['quote']='invented disclosure purpose'
-        if damage=='motive_only':result['scope']['purpose'].update(value='to win a wager',quote='to win a wager',path='scenario.reveal_reason',status='supported')
+        if damage=='invented_quote':result['scope']['data_type']['quote']='invented disclosure information'
+        if damage=='motive_only':result['scope']['data_type'].update(value='to win a wager',quote='to win a wager',path='scenario.reveal_reason',status='supported')
         return json.dumps(result)
     transport.complete=reply
     with pytest.raises(SourceExcluded): create_seed(seed,transport)
@@ -132,9 +133,12 @@ def test_uncertain_or_unsupported_source_is_excluded(damage):
 
 def test_source_consent_is_not_synthetic_permission_and_seven_shots_are_real():
     seed=create_seed(canonical(),QwenTransport())
-    assert seed['purpose']=='event coordination' and seed['consent'] is None
+    assert seed['purpose'] is None and seed['consent'] is None
     assert seed['source_motive']['value']=='to win a wager'
-    assert seed['field_provenance']['purpose']=='scenario.story'
+    assert 'purpose' not in seed['field_provenance']
+    variants = make_variants(seed)
+    assert variants[0]['purpose_provenance']['origin'] == 'synthetic_policy'
+    assert variants[0]['request']['purpose'] == 'confidential discussion'
     assert seed['human_review_status']=='pending' and seed['data_kind']=='real_derived_unlabeled'
     validate_scenario(seed)
     rows=family(); validate_generated(rows)
@@ -163,7 +167,7 @@ def test_automatic_replay_rejects_corruption(damage):
     if damage=='holdout':
         r['holdout_plan']={r['group_id']:'ood_template'}
         r['holdout_plan_hash']=content_hash(r['holdout_plan'])
-    if damage=='source_evidence':r['source_evidence']['purpose']['quote']='invented'
+    if damage=='source_evidence':r['source_evidence']['data_type']['quote']='invented'
     with pytest.raises(ValueError):validate_generated(rows)
 
 

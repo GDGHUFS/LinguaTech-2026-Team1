@@ -22,7 +22,7 @@
 
 ## 2. 자동 생성 원칙
 
-기본 `generation_mode: camber_automatic`이다. CAMBER 원문 상황·등장인물·정보·공개 맥락을 Qwen에 전달해 인용 근거와 함께 자동 정규화한다. 독립적인 새 상황으로 대체하지 않는다. 원문에서 공개 목적이나 필수 scope를 확인할 수 없으면 이유를 기록하고 제외한다. 원본 동의는 추정하지 않으며 초기 ALLOW는 별도의 가상 정책 개입이다. 기존 저장소의 합성 예시 7개를 자연화 prompt에 첨부한다. 사람 검수·수동 승인 파일 없이 의미 검사와 symbolic oracle 재계산으로 진행한다. holdout은 Target 실행 전에 seed 42로 배정한다.
+기본 `generation_mode: camber_automatic`, `dialogue_generation: guarded_v1`이다. 원본의 subject/sender/recipient/data_type은 기존 adapter와 직접 인용으로 추출하고 Qwen으로 원문 일치를 검토한다. 원본 purpose는 필수가 아니며 reveal_reason은 provenance에만 남기고 모델 입력에서 제외한다. 정책 purpose와 authorization은 별도의 가상 정책 개입이다. Python이 symbolic trajectory, 초기 규칙, ID, 연산-턴 대응, 최종 요청을 고정하고 기존 Rule Engine이 Gold를 계산한다. deterministic template로 핵심 정책 문장을 구성한 다음 Qwen은 승인된 유한 표현 집합 안에서 대사 하나만 변형한다. 자유 대화 생성과 모델의 aligned=true 자동 승인은 기본 경로에서 사용하지 않는다. 독립적인 문장 해독, 구조 검증, 원문·정책 일치와 Engine replay를 통과해야 승인한다. holdout은 Target 실행 전에 seed 42로 배정한다.
 
 seed 42, max_epochs 10, patience 3, AdamW, batch 8 × accumulation 2가 기본이다. 이 문서는 브랜치의 코드·config·prompt와 실행 시 생성하는 산출물만 사용한다.
 
@@ -139,7 +139,7 @@ python scripts/01_data_setup.py --canonical-out "$R/canonical.jsonl" --out "$R/s
 python scripts/05_preflight.py --out "$R/preflight-before.json"
 ```
 
-canonical 100개가 이미 준비됐다면 재사용한다. 원본이 준비돼 있으면 setup에 `--offline`을 붙일 수 있다. canonical의 pending 상태는 사람 승인으로 해소할 필요가 없다. purpose는 원문 근거로 자동 추출하며, 확인할 수 없으면 제외한다. 승인 수량을 맞추기 위한 대체 생성은 없다. preflight는 config의 기본 경로를 읽으므로 이 run의 별도 경로는 뒤의 직접 검증으로 확인한다.
+canonical 100개가 이미 준비됐다면 재사용한다. 원본이 준비돼 있으면 setup에 `--offline`을 붙일 수 있다. canonical의 pending 상태는 사람 승인으로 해소할 필요가 없다. 원본 purpose 부재만으로 제외하지 않는다. 네 가지 필수 원본 필드의 근거와 story 일치 여부가 검증돼야 하며, 합성 목적과 authorization은 이후 정책 단계에서 원본 사실과 구분한다. 승인 수량을 맞추기 위한 대체 상황 생성은 없다. preflight는 config의 기본 경로를 읽으므로 이 run의 별도 경로는 뒤의 직접 검증으로 확인한다.
 
 ## 6. Qwen3-8B 서버 및 생성
 
@@ -147,7 +147,7 @@ canonical 100개가 이미 준비됐다면 재사용한다. 원본이 준비돼 
 
 `127.0.0.1:8000`은 같은 GPU 서버 안의 Qwen 프로세스 주소다. 아래 `curl`은 Bash에서 해당 프로세스의 준비 상태와 JSON 응답을 확인한다. 외부 API 호출이나 컨테이너 명령이 아니다. `/v1/models` 확인은 기동 대기용이고 `/v1/chat/completions` 확인은 실제 생성 전 간단한 응답 테스트다.
 
-현재 QwenClient는 `/v1/chat/completions`에 temperature 0, max_tokens 4096, JSON object를 요청한다. 클라이언트가 thinking 옵션을 보내지 않으므로 **서버 기본값에서 끈다**. 대화 자연화는 저장소의 합성 예시를 사용하는 7-shot이다. 입력과 응답이 함께 들어가도록 context 16384로 시작한다.
+QwenClient는 `/v1/chat/completions`를 사용한다. 정규화는 JSON object, guarded paraphrase는 승인된 text enum의 strict JSON Schema를 요청한다. 서버가 구조화 출력을 지원하지 않거나 출력이 의미 검증에서 실패하면 제한된 시도 후 검증된 template로 fallback한다. 클라이언트가 thinking 옵션을 보내지 않으므로 **서버 기본값에서 끈다**. guarded 경로는 기존 7-shot 자유 대화 생성을 사용하지 않는다. context 16384로 시작한다.
 
 ```bash
 export QWEN_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(24))')"
@@ -183,8 +183,9 @@ PY
 # 먼저 2개 source로 API/생성/검증 연결만 확인한다.
 python scripts/02_prepare.py --resume --input "$R/canonical.jsonl" \
   --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B --revision "$GEN_REV" \
-  --limit-seeds 2 --execution-mode pilot \
-  --output "$R/smoke-generated.jsonl" --audit "$R/smoke-generation-audit.csv" \
+  --limit-seeds 2 --paraphrase-budget 3 --execution-mode pilot \
+  --output "$R/smoke-generated.jsonl" --accepted-output "$R/smoke-gold.jsonl" \
+  --normalized-output "$R/smoke-normalized.jsonl" --audit "$R/smoke-generation-audit.csv" \
   2>&1 | tee -a "$R/logs/generation-smoke.txt"
 ```
 
@@ -195,7 +196,8 @@ N_SOURCES=$(wc -l < "$R/canonical.jsonl")
 python scripts/02_prepare.py --resume --input "$R/canonical.jsonl" \
   --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B --revision "$GEN_REV" \
   --limit-seeds "$N_SOURCES" --execution-mode final \
-  --output "$R/generated-all.jsonl" --audit "$R/generation-audit.csv" \
+  --output "$R/generated-all.jsonl" --accepted-output "$R/accepted-gold.jsonl" \
+  --normalized-output "$R/normalized.jsonl" --audit "$R/generation-audit.csv" \
   2>&1 | tee -a "$R/logs/generation.txt"
 kill "$SERVE_PID"
 wait "$SERVE_PID" || true
@@ -203,9 +205,13 @@ unset QWEN_API_KEY
 nvidia-smi
 ```
 
-클라이언트는 같은 서버의 `/server_info?config_format=json`을 읽고 모델 ID, revision, tokenizer revision과 로드된 HF config commit을 대조한다. 이 endpoint를 쓰는 위 연구용 vLLM은 loopback에만 바인딩한다. dev endpoint를 외부에 공개하지 않는다. 서버가 로드된 commit을 제공하지 않거나 값이 다르면 `NOT VERIFIED`로 실패하며, 지정한 SHA만으로 검증을 우회하지 않는다. 해당 서버 버전의 실제 JSON 노출 여부는 GPU pilot에서 확인해야 한다.
+클라이언트는 같은 서버의 `/server_info?config_format=json`에서 모델 ID, revision, tokenizer revision이 등록한 SHA와 일치하는지 확인한다. hf_config를 제공하면 그 commit도 반드시 일치해야 한다. hf_config가 없거나 null인 버전은 서버가 명시적으로 보고한 두 revision에 연결하고, 같은 SHA의 로컬 HF config가 있으면 hash와 함께 보조 근거로 보존한다. 로컬 캐시 존재를 원격 서버의 실제 로드 증거로 표시하지 않는다. 모델/두 revision이 누락되거나 다르면 캐시가 있어도 실패한다. config를 제공했는데 commit이 없거나 다를 때도 캐시로 우회하지 않는다. 서버가 실제 제공하는 metadata와 strict schema 지원은 GPU smoke에서 확인한다. 이 연구용 endpoint는 loopback에만 바인딩한다.
 
-정규화·제외 기록은 audit CSV와 같은 이름의 `.source.jsonl`에 자동 저장된다. 추출 실패 때문에 최종 source 수가 canonical 수보다 적거나 0일 수 있다. 이유와 raw 정규화 응답을 확인하고, 원문 사실을 채워 넣거나 독립 상황으로 대체하지 않는다.
+정규화·제외 기록은 audit CSV와 같은 이름의 `.source.jsonl`에 저장된다. `.events.jsonl`/`.events.csv`는 source record ID, 원본 group ID, 단계, 실패 코드·필드와 유형별 오류 flag를 기록하고, `.stages.csv`는 단계·상태·실패 코드별 event 수를 집계한다. `.model.jsonl`은 정규화·자연어 생성·의미 검증의 실제 모델 응답을 호출 완료 즉시 저장한다. 결과 JSONL은 시작할 때 생성되고 원본 하나가 통과하면 그 원본의 대화를 바로 생성·개별 검증해 항목별로 flush/fsync한다. CSV sample 행도 즉시 쌓인다. 빈 파일이나 `controlled_family_status=pending`은 완료를 의미하지 않는다. 모든 원본이 탈락해도 빈 결과 파일과 탈락 로그가 남는다.
+
+소규모 진단은 `--limit-seeds 3 --paraphrase-budget 3 --execution-mode pilot`를 사용한다. Qwen 변형은 대화 3개에만 시도하고 나머지는 검증된 template로 만든다. guarded 경로에서 `--limit-dialogues`는 사용하지 않는다. 기존 13개 anchor와 12개 Gold/scope 대조 variant가 기본이며, 원문에 적합한 recipient 대안이 없으면 일부 scope variant를 생략한다. OOD group은 기존 2개 companion이 추가될 수 있다. 실패한 변형은 기본 1회 시도 후 template fallback하며 Qwen 성공에 포함하지 않는다. 13개 모두 성공해야 개별 데이터를 승인하는 legacy 제약도 guarded 경로에서는 적용하지 않는다. 모델·코드·prompt가 바뀌면 새 출력 경로를 사용한다.
+
+검증된 정규화 원본은 `--template-only --input "$R/normalized.jsonl" --holdout-plan <같은 실행의 holdout_plan.json>`으로 모델 없이 재사용할 수 있다. 이때도 새 output/accepted-output/audit 경로를 지정한다. 검증되지 않은 raw source를 모델 검토 없이 승인하지 않는다. accepted-output은 개별 검증 후 즉시 append/flush/fsync하고 종료 시 관계 검증 결과로 확정한다. Gold 데이터에는 Target 실패 label이 없으므로 predictor 학습 입력은 아직 아니다.
 
 서버 종료와 GPU 메모리 회수를 확인한다. OOM이면 다른 GPU 프로세스를 먼저 확인하고 서버 메모리/context를 조정한다. context를 무조건 줄이면 입력이 잘릴 수 있다. 중단 후 동일 명령의 `--resume`으로 진행 기록부터 재개한다. 실제 1회 요청 timeout은 180초다.
 
@@ -228,7 +234,7 @@ print('자동 검증 통과:',len(ok))
 PY
 ```
 
-Qwen 의미 검사, CAP별 인용 근거, oracle gold/support 재계산을 통과한 family만 사용한다. 실패 family는 제외한다. 사람 검수 파일을 작성하는 단계는 없다.
+guarded 경로는 실제 문장 인용과 별도 해독 결과, 고정 metadata, source consistency, oracle gold/support 재계산을 확인한다. 근거 없는 aligned=true는 승인하지 않는다. 위 선별 코드는 최종 검증 완료 기록만 받으며, 실패한 Qwen 변형을 대체한 template는 생성 방식과 fallback을 그대로 보존한다. 실제 Target label 및 split freeze 전에는 학습 준비 완료로 보고하지 않는다.
 
 ## 8. Target pilot → 전체 라벨링과 split
 
@@ -305,7 +311,7 @@ PY
 
 ## 10. 자동 freeze
 
-최종 config 조정 후 실행한다. split manifest와 group/controlled-pair 누수, 실제 Qwen 7-shot·의미 검사·oracle evidence trace, Target provenance, 생성 Qwen의 서버 보고 revision 및 record/config/holdout hash를 검증하고 자동 고정한다. split 전체가 있는 디렉터리를 입력해야 한다.
+최종 config 조정 후 실행한다. split manifest와 group/controlled-pair 누수, guarded 문장 증거·oracle replay, 실제 시도된 Qwen provenance, Target provenance 및 record/config/holdout hash를 검증하고 자동 고정한다. split 전체가 있는 디렉터리를 입력해야 한다.
 
 ```bash
 python scripts/08_freeze.py --records "$R/splits" --output "$R/approvals/freeze.json"

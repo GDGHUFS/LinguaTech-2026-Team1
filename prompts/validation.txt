@@ -39,3 +39,10 @@ CAP09 must consider initial rules, story mentions, aliases, possessives, pronoun
 unique recipients inferable from context. A null structured recipient is not evidence
 that the natural-language recipient is unknown. Record conflicts in mismatches.
 Unverified meaning must fail automatic validation; no human approval file is required.
+
+When purpose_provenance is present, also require checks.synthetic_purpose_consistent_with_source
+and checks.policy_conditions_expressed, with the same passed/rationale/evidence schema.
+Verify that hypothetical purpose is temporally separate and does not contradict source facts.
+Verify purpose, recipient, information and explicit ALLOW/DENY against mapped initial-rule and
+operation turns, including changed scope and exceptions. Missing source purpose is allowed.
+reveal_reason is optional motive metadata and grants no authorization.

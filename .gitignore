@@ -49,3 +49,4 @@ outputs/reports/*
 /data/labeled/**
 /data/splits/**
 /outputs/baselines/**
+/outputs/model-cache/

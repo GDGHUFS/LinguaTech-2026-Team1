@@ -23,9 +23,10 @@ def _inputs(sample, dialogue=None):
     rules = deepcopy(sample['initial_rules'])
     events = []
     if dialogue is None:
-        initial_turns = {r['rule_id']: 0 for r in rules}
-        operation_turns = {o['operation_id']: i + 1 for i, o in enumerate(sample['operation_trace'])}
-        request_turn = len(sample['operation_trace']) + 1
+        planned = sample.get('policy_turn_plan') if sample.get('generation_architecture')=='guarded_v1' else None
+        initial_turns = planned['initial_rule_turns'] if planned else {r['rule_id']: 0 for r in rules}
+        operation_turns = planned['operation_turns'] if planned else {o['operation_id']: i + 1 for i, o in enumerate(sample['operation_trace'])}
+        request_turn = planned['request_turn_id'] if planned else len(sample['operation_trace']) + 1
     else:
         initial_turns = dialogue.get('initial_rule_turns')
         operation_turns = dialogue['operation_turns']

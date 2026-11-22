@@ -5,17 +5,24 @@ from src.data.capability_matrix import CAPABILITIES
 
 SLOTS = ('data_type', 'subject', 'sender', 'recipient', 'purpose')
 
-def make_variants(seed, modify_fields=('authorization',)):
+def make_variants(seed, modify_fields=('authorization',), synthetic_purpose='confidential discussion'):
     if 'source_evidence' in seed:
         from src.data.source_policy import generation_blockers
         if generation_blockers(seed):
             return []
     # 필수 정보가 있는 후보만 사용하며 사람의 검수 상태는 그대로 전달한다.
-    if seed.get('status') != 'eligible_pending_review' or any(not seed.get(k) for k in SLOTS):
+    if seed.get('status') != 'eligible_pending_review' or any(not seed.get(k) for k in SLOTS if k != 'purpose'):
+        return []
+    if not seed.get('purpose') and not seed.get('source_normalization'):
         return []
     if not seed.get('group_id') or not seed.get('source_provenance'):
         raise ValueError('Missing source identity/provenance')
     scope = {k: seed[k] for k in SLOTS}
+    purpose_origin = 'source_extracted' if scope['purpose'] else 'synthetic_policy'
+    if purpose_origin == 'synthetic_policy':
+        if not isinstance(synthetic_purpose, str) or not synthetic_purpose.strip():
+            raise ValueError('Explicit nonempty synthetic policy purpose required')
+        scope['purpose'] = synthetic_purpose
     identity = hashlib.sha256(seed['seed_id'].encode()).hexdigest()[:20]
     rule = dict(rule_id=f'r_{identity}', **scope, authorization='ALLOW')
     # 초기 ALLOW는 연구를 위해 추가한 조건이다. 원본에 있던 동의로 취급하지 않는다.
@@ -25,6 +32,9 @@ def make_variants(seed, modify_fields=('authorization',)):
             'group_id': seed['group_id'], 'variant_group_id': f'{seed["group_id"]}:{identity}',
             'data_kind': 'real_derived_unlabeled', 'initial_rules': [rule], 'operation_trace': [],
             'request': deepcopy(scope), 'policy_context': deepcopy(seed['policy_context']),
+            'purpose_provenance': dict(origin=purpose_origin, value=scope['purpose'],
+                source_path=(seed.get('field_provenance') or {}).get('purpose') if purpose_origin == 'source_extracted' else None,
+                changes=[]),
             'synthetic_intervention': True, 'transformation_notes': ['Synthetic base permission; not source consent or gold.'],
             'oracle_relation_status': 'pending', 'gold_decision': None, 'gold_state': None,
             'evidence_trace': None, 'human_review_status': 'pending', 'variant_id': 'base',
@@ -81,10 +91,115 @@ def make_variants(seed, modify_fields=('authorization',)):
             continue
         v = deepcopy(next(r for r in result if r['capability_id']=='CAP03'))
         v.update(sample_id=v['sample_id']+'__'+field, variant_id='CAP03_'+field, modification_subtype=field)
-        value = 'synthetic_alternative_' + field
+        if field == 'recipient':
+            alternatives = [seed[k] for k in ('subject','sender') if seed[k] != seed['recipient']]
+            if not alternatives:
+                continue
+            value = alternatives[0]
+        elif field == 'purpose':
+            value = 'restricted record review'
+        else:
+            value = 'administrative contact details (hypothetical policy category)'
         v['operation_trace'][0]['changes'] = {field:value}
+        if field == 'purpose':
+            v['purpose_provenance']['changes'] = [dict(operation_id=v['operation_trace'][0]['operation_id'],
+                value=value, origin='synthetic_policy')]
         v['transformation_notes'].append('Synthetic scope intervention: '+field+'='+value)
         result.append(v)
+    return result
+
+
+def validate_policy_provenance(sample):
+    """Check policy scope separately from immutable source facts; never infer gold."""
+    if not sample.get('source_normalization'):
+        return []
+    meta = sample.get('purpose_provenance') or {}
+    if (meta.get('origin') != 'synthetic_policy' or not isinstance(meta.get('value'), str) or not meta['value'].strip() or
+            meta.get('source_path') is not None or sample.get('source_facts', {}).get('purpose') is not None):
+        return ['synthetic_policy_purpose_provenance_mismatch']
+    rules = list(sample.get('initial_rules', []))
+    rules += [o['rule'] for o in sample.get('operation_trace', []) if 'rule' in o]
+    if any(r.get('purpose') != meta['value'] or r.get('authorization') not in ('ALLOW', 'DENY') for r in rules):
+        return ['synthetic_policy_scope_or_authorization_mismatch']
+    if sample.get('request', {}).get('purpose') != meta.get('request_value',meta['value']):
+        return ['synthetic_policy_request_purpose_mismatch']
+    changes = [dict(operation_id=o['operation_id'], value=o['changes']['purpose'], origin='synthetic_policy')
+        for o in sample.get('operation_trace', []) if 'purpose' in o.get('changes', {})]
+    if meta.get('changes') != changes:
+        return ['synthetic_policy_purpose_change_provenance_mismatch']
+    return []
+
+
+def expand_coverage_variants(anchors):
+    """Add counterexamples to operation-keyword shortcuts; do not rebalance on Target results."""
+    if not anchors:
+        return []
+    result = list(anchors)
+    by_cap = {v.get('capability_id'):v for v in anchors if not v.get('modification_subtype')}
+    def variant(cap, name):
+        row = deepcopy(by_cap[cap])
+        row.update(sample_id=row['sample_id']+'__'+name,variant_id=row['variant_id']+'__'+name,
+            parent_variant_id=None,variant_group_id=row['variant_group_id']+':'+name,
+            controlled_anchor=False)
+        row['transformation_notes'].append('Predeclared policy contrast: '+name)
+        return row
+    # ADD can introduce a prohibition as well as a permission.
+    row = variant('CAP01','new_prohibition')
+    row['operation_trace'][0]['rule']['authorization'] = 'DENY'
+    result.append(row)
+    # Revoking A does not revoke an independently stated permission B.
+    row = variant('CAP02','independent_permission')
+    other = deepcopy(row['initial_rules'][0])
+    other['rule_id'] += '_independent'
+    row['initial_rules'].append(other)
+    result.append(row)
+    # A narrower DENY exception to a general ALLOW, and a request outside an ALLOW exception.
+    row = variant('CAP04','narrow_prohibition')
+    row['initial_rules'][0]['authorization'] = 'ALLOW'
+    row['operation_trace'][0]['rule']['authorization'] = 'DENY'
+    result.append(row)
+    row = variant('CAP04','outside_exception')
+    row['request']['channel'] = 'public_portal'
+    result.append(row)
+    # Same scope-change event: asking within its new scope can still be allowed.
+    for field in ('recipient','purpose'):
+        original = next((v for v in anchors if v.get('modification_subtype')==field),None)
+        if not original:
+            continue
+        row = deepcopy(original)
+        row.update(sample_id=row['sample_id']+'__new_scope_request',variant_id=row['variant_id']+'__new_scope_request',
+            parent_variant_id=None,variant_group_id=row['variant_group_id']+':new_scope_'+field,controlled_anchor=False)
+        row['request'][field] = row['operation_trace'][0]['changes'][field]
+        if field=='purpose':
+            row['purpose_provenance']['request_value'] = row['request'][field]
+        result.append(row)
+    original = next((v for v in anchors if v.get('modification_subtype')=='data_type'),None)
+    if original:
+        row = deepcopy(original)
+        row.update(sample_id=row['sample_id']+'__return_to_source_category',
+            variant_id=row['variant_id']+'__return_to_source_category',parent_variant_id=None,
+            variant_group_id=row['variant_group_id']+':return_to_source_category',controlled_anchor=False)
+        hypothetical = row['operation_trace'][0]['changes']['data_type']
+        row['initial_rules'][0]['data_type'] = hypothetical
+        row['operation_trace'][0]['changes']['data_type'] = row['source_facts']['data_type']
+        row['hypothetical_initial_scopes'] = [dict(rule_id=row['initial_rules'][0]['rule_id'],
+            field='data_type',value=hypothetical,origin='synthetic_policy',asserted_source_fact=False)]
+        result.append(row)
+    # Reapproval restores its own scope, not every possible disclosure purpose.
+    row = variant('CAP05','other_purpose_request')
+    row['request']['purpose'] = 'restricted record review'
+    row['purpose_provenance']['request_value'] = row['request']['purpose']
+    result.append(row)
+    for cap in ('CAP06','CAP07','CAP08','CAP09'):
+        row = variant(cap,'prohibition_context')
+        row['initial_rules'][0]['authorization'] = 'DENY'
+        result.append(row)
+    for row in result:
+        row['generation_architecture'] = 'guarded_v1'
+        row.setdefault('controlled_anchor',True)
+        row['scope_intervention_provenance'] = [dict(field=k,value=v,origin='synthetic_policy',asserted_source_fact=False)
+            for op in row['operation_trace'] for k,v in op.get('changes',{}).items()
+            if k in ('recipient','purpose','data_type')]
     return result
 
 

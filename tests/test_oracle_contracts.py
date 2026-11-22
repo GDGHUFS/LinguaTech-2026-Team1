@@ -100,7 +100,7 @@ class FixtureClient:
 
     def complete(self, prompt):
         if '"structured_trace"' in prompt:
-            sample = json.loads(prompt.split('INPUT JSON:\n')[-1])['structured_trace']
+            sample = json.loads(prompt.split('INPUT JSON:\n')[-1].partition('\nEND INPUT JSON')[0])['structured_trace']
             return json.dumps(semantic_fixture(self.natural, sample, self.aligned))
         return self.outputs.pop(0)
 
@@ -110,6 +110,8 @@ def semantic_fixture(natural, sample, aligned=True):
     result = dict(aligned=aligned, mismatches=[], missing_facts=[], added_unsupported_permissions=[], confidence=.99)
     if 'policy_temporal_boundary' in sample or sample.get('capability_id') in ('CAP07','CAP08','CAP09'):
         keys = ['historical_facts_preserved','synthetic_policy_temporally_separate','subject_information_request_preserved']
+        if sample.get('purpose_provenance'):
+            keys += ['synthetic_purpose_consistent_with_source', 'policy_conditions_expressed']
         if sample.get('capability_id') == 'CAP09': keys.append('recipient_not_recoverable_from_full_dialogue')
         result['checks'] = {k: dict(passed=True, rationale='Synthetic transport fixture only',
             evidence=[dict(turn_id=0,quote=natural['turns'][0]['text'])]) for k in keys}

@@ -1,6 +1,11 @@
 # Separate r3 revision; prior pilot and split paths are preserved.
 schema_version: 1.0.0
 generation_mode: camber_automatic
+synthetic_policy_purpose: confidential discussion
+dialogue_generation: guarded_v1
+variant_policy: coverage_v1
+qwen_paraphrase_attempts: 1
+free_generation: false
 status: camber_automatic
 finalized: null
 paths:

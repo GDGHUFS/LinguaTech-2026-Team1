@@ -45,10 +45,10 @@ def test_prepare_cli_keeps_other_families_after_unexpected_error(tmp_path, monke
     bad_id = seeds[0]['seed_id']
     if stage == 'preparation':
         original = module.make_variants
-        def failing(seed, *args):
+        def failing(seed, *args, **kwargs):
             if seed['seed_id'] == bad_id:
                 raise RuntimeError('injected')
-            return original(seed, *args)
+            return original(seed, *args, **kwargs)
         monkeypatch.setattr(module, 'make_variants', failing)
     elif stage == 'structure':
         import src.data.validators as validators

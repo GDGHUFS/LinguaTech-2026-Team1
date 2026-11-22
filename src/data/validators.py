@@ -34,6 +34,8 @@ def validate_capability(sample):
 
 def validate_structure(sample):
     errors = validate_capability(sample)
+    from src.data.mutations import validate_policy_provenance
+    errors.extend(validate_policy_provenance(sample))
     from src.rules.schema import validate_trace_priorities
     try:
         validate_trace_priorities(sample['initial_rules'], sample['operation_trace'])
@@ -98,7 +100,7 @@ def validate_dialogue(output, sample):
         ids = [mapping[k] for k in expected]
         if any(type(i) is not int or not 0 <= i < len(turns)-1 for i in ids) or ids != sorted(ids):
             errors.append('invalid_operation_order')
-    if sample.get('capability_id') == 'CAP09':
+    if sample.get('capability_id') == 'CAP09' and sample.get('generation_architecture') != 'guarded_v1':
         # A missing symbolic slot is insufficient: names in any history turn leak
         # the source recipient. No literal hit is only an inconclusive lower bound.
         import re
@@ -107,12 +109,25 @@ def validate_dialogue(output, sample):
             errors.append('cap09_recipient_recoverable_from_dialogue')
     return errors
 
-def validate_semantics(result, sample=None, dialogue=None):
-    """Qwen 검증 응답의 형식, 불일치 목록과 confidence를 검사해 오류 목록을 반환한다. 사람의 검수를 대신하지 않는다."""
+def semantic_requirements(sample=None):
+    """Share the exact legacy response contract between prompt and validator."""
     required = {'aligned','mismatches','missing_facts','added_unsupported_permissions','confidence'}
+    needed = []
     enhanced = sample is not None and ('policy_temporal_boundary' in sample or sample.get('capability_id') in ('CAP07', 'CAP08', 'CAP09'))
     if enhanced:
         required.add('checks')
+        needed = ['historical_facts_preserved', 'synthetic_policy_temporally_separate',
+                  'subject_information_request_preserved']
+        if sample.get('purpose_provenance'):
+            needed += ['synthetic_purpose_consistent_with_source', 'policy_conditions_expressed']
+        if sample.get('capability_id') == 'CAP09':
+            needed.append('recipient_not_recoverable_from_full_dialogue')
+    return required, needed
+
+
+def validate_semantics(result, sample=None, dialogue=None):
+    """Qwen 검증 응답의 형식, 불일치 목록과 confidence를 검사해 오류 목록을 반환한다. 사람의 검수를 대신하지 않는다."""
+    required, needed = semantic_requirements(sample)
     if not isinstance(result, dict) or set(result) != required:
         return ['invalid_semantic_schema']
     import math
@@ -126,11 +141,7 @@ def validate_semantics(result, sample=None, dialogue=None):
         errors.append('semantic_misalignment')
     if result['confidence'] < .9:
         errors.append('low_semantic_confidence')
-    if enhanced:
-        needed = ['historical_facts_preserved', 'synthetic_policy_temporally_separate',
-                  'subject_information_request_preserved']
-        if sample.get('capability_id') == 'CAP09':
-            needed.append('recipient_not_recoverable_from_full_dialogue')
+    if needed:
         checks = result.get('checks')
         if not isinstance(checks, dict) or set(checks) != set(needed):
             return errors + ['missing_semantic_checks']

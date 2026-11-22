@@ -1,5 +1,6 @@
 """Interrupt actual CLI loops and verify completed inference is not repeated."""
 import importlib.util
+import csv
 import json
 import sys
 from types import ModuleType, SimpleNamespace
@@ -74,6 +75,18 @@ def test_generation_restart_reuses_normalization_and_completed_samples(tmp_path,
     with pytest.raises(KeyboardInterrupt):
         module.main()
     assert len(out.read_text(encoding='utf-8').splitlines()) == 1
+    with audit.open(encoding='utf-8', newline='') as stream:
+        live_audit = list(csv.DictReader(stream))
+    assert len(live_audit) == 1
+    assert live_audit[0]['sample_id'] == attempts[0]
+    assert live_audit[0]['controlled_family_status'] == 'pending'
+    assert json.loads(out.read_text(encoding='utf-8'))['controlled_family_status'] == 'pending'
+    # Start naturalization after the first accepted source, before normalizing all sources.
+    assert len(normalizations) == 1
+    assert audit.with_suffix('.events.csv').exists()
+    assert audit.with_suffix('.stages.csv').exists()
+    raw_events = [json.loads(line) for line in audit.with_suffix('.model.jsonl').read_text(encoding='utf-8').splitlines()]
+    assert {r['stage'] for r in raw_events} == {'normalization','qwen_paraphrase'}
     first = attempts[0]
     interrupt[0] = False
     monkeypatch.setattr(sys, 'argv', argv+['--resume'])
@@ -83,6 +96,11 @@ def test_generation_restart_reuses_normalization_and_completed_samples(tmp_path,
     assert len(normalizations) == 3
     assert len({r['sample_id'] for r in rows}) == len(rows)
     assert all(r['controlled_family_status'] == 'semantic_complete_oracle_verified' for r in rows)
+    with audit.open(encoding='utf-8', newline='') as stream:
+        completed_audit = list(csv.DictReader(stream))
+    samples = [r for r in completed_audit if r['row_type'] == 'sample']
+    assert len(samples) == len(rows)
+    assert all(r['controlled_family_status'] == 'semantic_complete_oracle_verified' for r in samples)
     before = len(attempts)
     module.main()
     assert len(attempts) == before
