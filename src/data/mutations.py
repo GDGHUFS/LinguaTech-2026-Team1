@@ -203,10 +203,14 @@ def expand_coverage_variants(anchors):
     return result
 
 
-def apply_holdout_plan(variants, pool):
+def apply_holdout_plan(variants, pool, coverage='legacy'):
     """Target label이나 점수와 무관하게 사전 지정한 group별 holdout을 적용한다.
 
     ID의 기본 설정은 유지한다. holdout group의 대조 variant도 쌍별 검토를 위해 남기되, split 단계에서 OOD 평가 대상에서는 제외한다."""
+    if coverage not in ('legacy', 'coverage_v2'):
+        raise ValueError('Unknown holdout coverage')
+    if coverage == 'coverage_v2' and pool != 'id':
+        return _expanded_holdout(variants, pool)
     if pool == 'id':
         return variants
     if pool not in ('ood_composition','ood_template') or not variants:
@@ -235,3 +239,54 @@ def apply_holdout_plan(variants, pool):
     else:
         companion['request']['channel'] = 'public_portal'
     return variants+[companion, v]
+
+
+def _expanded_holdout(variants, pool):
+    """Predeclared structural coverage, independent of observed Target decisions."""
+    if pool not in ('ood_composition', 'ood_template') or not variants:
+        raise ValueError('Unknown or empty holdout pool')
+    added = []
+
+    def detached(original, suffix):
+        row = deepcopy(original)
+        row.update(sample_id=row['sample_id']+'__'+suffix,
+                   variant_id=row['variant_id']+'__'+suffix,
+                   parent_variant_id=None, expected_gold_relation=None,
+                   capability_id=None, controlled_anchor=False,
+                   variant_group_id=row['variant_group_id']+':'+suffix)
+        row['transformation_notes'].append('Predeclared holdout coverage_v2: '+suffix)
+        return row
+
+    if pool == 'ood_template':
+        for original in variants:
+            # Missing-recipient prompts prepend a clarification instruction and do not
+            # satisfy the existing held-out question-prefix contract.
+            if original['request'].get('recipient') is None:
+                continue
+            row = detached(original, 'ood_template_v2')
+            row.update(template_family_id='b_ood_question_embedding_v1',
+                       request_style='question_embedding')
+            added.append(row)
+    else:
+        base = next(row for row in variants if row['variant_id'] == 'base')
+        # REVOKE requires ALLOW, and EXCEPTION must flip its parent's authorization.
+        for initial in ('ALLOW',):
+            for style in ('direct', 'paraphrase', 'indirect'):
+                for channel in ('secure_portal', 'public_portal'):
+                    suffix = 'ood_composition_v2_'+style+'_'+channel
+                    row = detached(base, suffix)
+                    row['request_style'] = style
+                    rule = row['initial_rules'][0]
+                    rule['authorization'] = initial
+                    rid = rule['rule_id']
+                    row['operation_trace'] = [
+                        dict(operation_id='comp_revoke',operation='REVOKE',rule_id=rid),
+                        dict(operation_id='comp_reinstate',operation='REINSTATE',rule_id=rid),
+                        dict(operation_id='comp_exception',operation='EXCEPTION',
+                             rule_id=rid+'_exception',parent_rule_id=rid,
+                             rule=dict(rule,rule_id=rid+'_exception',authorization='DENY',
+                                       scope={'channel':'secure_portal'}))]
+                    row['request']['channel'] = channel
+                    row['template_family_id'] = 'b_pilot_composition_v1'
+                    added.append(row)
+    return variants + added

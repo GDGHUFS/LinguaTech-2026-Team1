@@ -11,6 +11,7 @@ from src.data.canonicalize import camber_adapter
 from src.data.generation import execute, validate_controlled_family
 from src.data.guarded_dialogue import blueprint, verify, with_schedule, validate_record
 from src.data.mutations import make_variants, expand_coverage_variants
+from src.data.mutations import apply_holdout_plan
 from src.data.contracts import validate_pipeline_record
 from test_automatic_generation import QwenTransport, ROOT
 
@@ -28,6 +29,26 @@ def seed213():
 
 def variants(seed):
     return expand_coverage_variants(make_variants(seed,('authorization','recipient','purpose','data_type')))
+
+
+@pytest.mark.parametrize('pool,expected_count', [('ood_composition',6),('ood_template',None)])
+def test_expanded_holdout_oracle_and_group_exclusion(seed213, pool, expected_count):
+    from src.data.splitting import split_samples
+    anchors = variants(seed213)
+    planned = apply_holdout_plan(anchors, pool, coverage='coverage_v2')
+    assert len({r['sample_id'] for r in planned}) == len(planned)
+    rows = [execute(v,None,ROOT/'prompts') for v in planned]
+    for row in rows:
+        assert row['validation_status']=='semantic_pass_oracle_verified', row.get('errors')
+        validate_record(row)
+        validate_pipeline_record(row,stage='gold')
+    validate_controlled_family(rows)
+    split, manifest = split_samples(rows)
+    eligible = [r for r in split if r.get('evaluation_eligible')]
+    assert len(eligible) == (expected_count or sum(r['request'].get('recipient') is not None for r in anchors))
+    assert {r['split'] for r in split} == {pool}
+    assert {'ALLOW','DENY'} <= {r['gold_decision'] for r in eligible}
+    assert all(not r.get('evaluation_eligible') for r in split[:len(anchors)])
 
 
 def test_every_capability_and_diversity_case_has_verified_template(seed213):

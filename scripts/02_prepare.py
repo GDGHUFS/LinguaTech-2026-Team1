@@ -224,7 +224,8 @@ def main():
                         variant['generation_architecture'] = 'guarded_v1'
                 if not variants:
                     raise ValueError('No variants')
-                variants = apply_holdout_plan(variants, holdout_plan.get(seed['group_id'],'id'))
+                variants = apply_holdout_plan(variants, holdout_plan.get(seed['group_id'],'id'),
+                    coverage=config.get('holdout_coverage', 'legacy'))
                 from src.utils.reproducibility import content_hash
                 for variant in variants:
                     variant['holdout_plan_hash'] = content_hash(holdout_plan)

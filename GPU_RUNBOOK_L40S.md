@@ -269,6 +269,183 @@ PY
 
 unsafe label은 **gold DENY → Target ALLOW**다. 단순 불일치와 다르다. 클래스가 한쪽뿐이면 그 상태로 AUPRC 모델 선택을 강행하지 않는다. Target을 약하게 바꾸거나 test 실패를 보고 split을 재배치하지 말고, 사전에 정한 source/CAP 확보 계획을 검토한다. INVALID_OUTPUT/EXECUTION_ERROR는 음성 label로 치환하지 않는다.
 
+## 8.1. on100 이후 독립 source 100개 추가 개발 배치
+
+2026-11-23 추가. **on100에서 unsafe 양성이 부족해 중단한 경우, 이번 작업은 이 절만 실행한다. 9절 이후 학습·freeze로 넘어가지 않는다.** 기존 on100 전체와 새 데이터를 합치거나 split을 다시 나누지 않는다. 새 배치도 생성 설계를 점검하는 개발 데이터이며 최종 평가용 데이터 확보는 별도 계획으로 정한다.
+
+담당자 전달 문구: **“최신 `hc-1115-abc-integration` 코드를 받은 뒤 GPU_RUNBOOK_L40S.md 8.1.1~8.1.6을 순서대로 실행해주세요. on100 압축파일이 필요하며, 결과 압축파일과 class-coverage.json을 전달해주세요. 이번에는 학습하지 않습니다.”**
+
+### 8.1.1. 코드 갱신과 신규 배치 준비
+
+명령은 로컬 Git Bash가 아닌 **GPU 서버 Bash**에서 실행한다. 기존 작업이 종료된 상태여야 한다. 아래 `/path/to/conshift`와 `ON100_ARCHIVE`를 실제 경로로 바꾼다. `git pull --ff-only`가 실패하면 서버 변경사항을 먼저 확인하며 강제 초기화하지 않는다.
+
+```bash
+cd /path/to/conshift
+git switch hc-1115-abc-integration
+git pull --ff-only origin hc-1115-abc-integration
+set -euo pipefail
+source .venv-train/bin/activate
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 CUDA_VISIBLE_DEVICES=0
+export HF_HOME="$PWD/.hf-cache"
+export ON100_ARCHIVE="$PWD/on100_20261123_085543.tar.gz"
+test -f "$ON100_ARCHIVE"
+
+export RUN="expand100_$(date +%Y%m%d_%H%M%S)"
+export R="runs/$RUN"
+python scripts/10_prepare_expansion.py \
+  --exclude "$ON100_ARCHIVE" --count 100 --seed 43 --offline \
+  --out-dir "$R"
+mkdir -p "$R/logs"
+printf '%s\n' "$RUN" > runs/ACTIVE_EXPANSION
+git rev-parse HEAD > "$R/logs/git-head.txt"
+git status --short > "$R/logs/git-status.txt"
+```
+
+`--offline`은 기존 원본 캐시를 검증해 재사용한다. 캐시가 없으면 이 준비 명령에서만 `--offline`을 빼고 다시 실행한다. 준비가 완료되어 `$R`이 만들어졌으면 같은 준비 명령을 반복하지 않는다. 이전 추가 배치도 있다면 **각 배치의 `canonical.jsonl`을 `--exclude <경로>`로 추가**하여 중복 source 선택을 막는다. on100 압축파일에서는 normalized/generated/gold/Target 기록의 원본 group을 제외한다. 다른 이전 데이터셋과도 독립이어야 하면 해당 archive나 canonical을 함께 제외한다.
+
+새 `data.yaml`은 `holdout_coverage: coverage_v2`를 사용한다. 기존 ID 생성은 유지하고, OOD composition은 동일한 REVOKE→REINSTATE→EXCEPTION에서 채널 2종×요청 표현 3종을 만든다. OOD template은 수신자가 명시된 여러 CAP·정책 상태를 question embedding으로 변환한다. 수신자 누락 사례는 기존 요청 형식 계약과 호환되지 않아 변환하지 않는다. Gold는 oracle로 재계산하며 Target 실패 여부로 사례를 골라내지 않는다. 원본 선택 seed만 43이며 split/학습 seed 42는 유지한다. 검증 탈락에 따라 실제 승인 source 수는 100개보다 적을 수 있다.
+
+### 8.1.2. on100과 동일한 Qwen 생성 서버 기동
+
+아래 SHA는 첨부 on100의 `configs/model.yaml`에서 확인한 값이다. 새 모델 revision을 조회하지 않는다. 환경과 가중치 캐시는 기존 3~4절에서 준비되어 있어야 한다. 같은 GPU의 이전 생성/Target 프로세스가 종료된 것을 먼저 확인한다.
+
+```bash
+export GEN_REV=b968826d9c46dd6066d109eabc6255188de91218
+export TARGET_REV=cdbee75f17c01a7cc42f958dc650907174af0554
+export QWEN_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(24))')"
+nvidia-smi
+VLLM_SERVER_DEV_MODE=1 nohup .venv-serve/bin/vllm serve Qwen/Qwen3-8B \
+  --revision "$GEN_REV" --tokenizer-revision "$GEN_REV" \
+  --served-model-name Qwen/Qwen3-8B \
+  --host 127.0.0.1 --port 8000 --api-key "$QWEN_API_KEY" \
+  --dtype bfloat16 --tensor-parallel-size 1 \
+  --gpu-memory-utilization 0.80 --max-model-len 16384 --max-num-seqs 1 \
+  --default-chat-template-kwargs '{"enable_thinking":false}' \
+  > "$R/logs/vllm.log" 2>&1 &
+export SERVE_PID=$!
+printf '%s\n' "$SERVE_PID" > "$R/vllm.pid"
+READY=0
+for i in $(seq 1 180); do
+  if curl -fsS -H "Authorization: Bearer $QWEN_API_KEY" \
+    http://127.0.0.1:8000/v1/models > "$R/served-models.json"; then READY=1; break; fi
+  kill -0 "$SERVE_PID" || { tail -n 80 "$R/logs/vllm.log"; exit 1; }
+  sleep 2
+done
+test "$READY" = 1
+```
+
+### 8.1.3. 확장 OOD를 포함한 생성과 Gold 검증
+
+```bash
+python scripts/02_prepare.py --resume \
+  --config "$R/data.yaml" --input "$R/canonical.jsonl" \
+  --endpoint http://127.0.0.1:8000/v1 --model Qwen/Qwen3-8B \
+  --revision "$GEN_REV" --limit-seeds 100 --execution-mode final \
+  --output "$R/generated-all.jsonl" --accepted-output "$R/gold.jsonl" \
+  --normalized-output "$R/normalized.jsonl" --audit "$R/generation-audit.csv" \
+  2>&1 | tee -a "$R/logs/generation.txt"
+
+python - <<'PY'
+import json, os
+from pathlib import Path
+from collections import Counter
+from src.data.approvals import enforce_execution
+r = Path(os.environ['R'])
+rows = [json.loads(x) for x in (r/'gold.jsonl').read_text().splitlines() if x.strip()]
+assert rows, '검증 통과 Gold 없음: generation audit 확인'
+assert all(x.get('controlled_family_status') == 'semantic_complete_oracle_verified' for x in rows)
+enforce_execution(rows, mode='pilot')
+print('verified Gold:', len(rows))
+print('generation methods:', dict(Counter(x.get('generation_method') for x in rows)))
+print('fallback:', dict(Counter(x.get('fallback_used') for x in rows)))
+PY
+
+kill "$SERVE_PID"
+wait "$SERVE_PID" || true
+unset QWEN_API_KEY
+nvidia-smi
+```
+
+명령이 정상 종료된 `gold.jsonl`만 다음 단계에 사용한다. GPU 메모리가 반환되지 않았으면 생성 서버의 자식 프로세스까지 종료됐는지 확인한 뒤 진행한다. Qwen 변형 실패 시 기존 검증된 template fallback 정책을 유지하며 실제 비율을 보고한다.
+
+### 8.1.4. 동일 Target으로 전체 라벨링
+
+```bash
+python scripts/03_label_and_split.py --resume \
+  --config "$R/data.yaml" --input "$R/gold.jsonl" \
+  --revision "$TARGET_REV" --execute --full-run --execution-mode pilot \
+  --labeled-output "$R/target-all.jsonl" --splits-dir "$R/splits" \
+  --report "$R/target-all.csv" \
+  2>&1 | tee -a "$R/logs/target.txt"
+```
+
+### 8.1.5. 평가 대상 수·양성 수·독립 group 수 확인
+
+이 단계는 결과 보고이며, 양성이 존재한다는 이유만으로 최종 학습을 승인하지 않는다. 양성 0개도 그대로 기록하고 결과를 전달한다. 양성을 확보하려고 split이나 라벨 정의를 바꾸지 않는다.
+
+```bash
+python - <<'PY' | tee "$R/logs/class-coverage.txt"
+import json, os
+from pathlib import Path
+from collections import Counter
+from evaluate import read_rows
+from src.evaluation.protocol import _manifest, _valid
+r = Path(os.environ['R'])
+rows = read_rows(r/'splits')
+_manifest(json.loads((r/'splits/split_manifest.json').read_text()), rows)
+report = {'purpose': 'development_only', 'splits': {}}
+for split in ['train', 'validation', 'id_test', 'ood_composition', 'ood_template']:
+    all_rows = [x for x in rows if x['split'] == split]
+    selected = [x for x in all_rows if _valid(x)]
+    positive = [x for x in selected if x['failure_label_unsafe'] == 1]
+    counts = Counter(x['failure_label_unsafe'] for x in selected)
+    cross = Counter((x['gold_decision'], x['target_decision']) for x in selected)
+    item = dict(total=len(all_rows), eligible=len(selected),
+        negative=counts[0], positive=counts[1],
+        positive_groups=len({x['group_id'] for x in positive}),
+        gold_target={g+' -> '+t:n for (g,t),n in sorted(cross.items())})
+    report['splits'][split] = item
+    print(split, json.dumps(item, ensure_ascii=False))
+(r/'class-coverage.json').write_text(json.dumps(report, indent=2)+'\n')
+PY
+```
+
+### 8.1.6. 결과 전달과 중단 후 재개
+
+```bash
+cp configs/model.yaml "$R/model-config-at-run.yaml"
+python - <<'PY'
+import hashlib, os
+from pathlib import Path
+r = Path(os.environ['R'])
+with (r/'SHA256SUMS').open('w') as out:
+    for p in sorted(r.rglob('*')):
+        if not p.is_file() or p.name == 'SHA256SUMS':
+            continue
+        h = hashlib.sha256()
+        with p.open('rb') as src:
+            for block in iter(lambda: src.read(1024*1024), b''):
+                h.update(block)
+        out.write(f'{h.hexdigest()}  {p.relative_to(r)}\n')
+PY
+tar -czf "${RUN}-results.tar.gz" "$R"
+```
+
+전달물은 `${RUN}-results.tar.gz`와 그 안의 `class-coverage.json`이다. **9절 이후는 진행하지 않는다.** 이번 결과를 보고 CAP별 실패율·양성의 독립 group 수를 확인한 뒤 최종 수집 규모를 정한다. 실패 발생을 보장하거나 50:50 비율을 맞추기 위한 변경은 아니다.
+
+터미널 재접속 시 저장소 루트에서 아래 환경을 복원한다. 8.1.1의 source 준비를 다시 실행하지 않는다. 생성이 중단됐다면 기존 서버 상태를 확인해 8.1.2로 서버를 준비한 뒤 **동일 `$R`로 8.1.3**을 재실행한다. Target이 중단됐다면 생성 서버가 종료된 상태에서 **8.1.4**를 재실행한다. 실행 도중 코드·설정·prompt를 바꾸면 resume이 거부되므로 별도 배치로 시작한다.
+
+```bash
+source .venv-train/bin/activate
+set -euo pipefail
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 CUDA_VISIBLE_DEVICES=0
+export HF_HOME="$PWD/.hf-cache"
+export RUN="$(cat runs/ACTIVE_EXPANSION)"
+export R="runs/$RUN"
+export GEN_REV=b968826d9c46dd6066d109eabc6255188de91218
+export TARGET_REV=cdbee75f17c01a7cc42f958dc650907174af0554
+```
+
 ## 9. ModernBERT 실제 pilot과 최종 config 확정
 
 ```bash
