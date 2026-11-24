@@ -1,5 +1,0 @@
--r requirements-evaluation.txt
-torch>=2.6,<3
-transformers>=4.55,<6
-tokenizers>=0.21,<1
-accelerate>=1.0,<2

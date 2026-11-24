@@ -1,0 +1,1020 @@
+{
+  "github_commit": "00be379c882c15353d43dbabe0bf91ee4152b6c8",
+  "dataset_revision": "47115ae2af4830948f3f15697221a1acca6078a7",
+  "files": [
+    {
+      "path": "official_code/Readme.md",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/Readme.md",
+      "bytes": 9154,
+      "sha256": "356fa5e0be7b728714f311bf96863e1749c0763539308702acb3c9767d7636ed"
+    },
+    {
+      "path": "official_code/data/input_data_modified_keywords_v2.jsonl",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/data/input_data_modified_keywords_v2.jsonl",
+      "bytes": 344183,
+      "sha256": "264a2597c8ad1155e7dc31ac16301d63747b49111393883dc60c3e9a098d80eb"
+    },
+    {
+      "path": "official_code/src/eval.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/eval.py",
+      "bytes": 9446,
+      "sha256": "5c6886110a76c29334c95479d05b62508deae32c1a49fb3f4ef64d6117b797ee"
+    },
+    {
+      "path": "official_code/src/instruction/base.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/base.py",
+      "bytes": 1285,
+      "sha256": "4bc07c86510061e06b6b943b1b4b38bea26509e03740f7ccf2506d6f8867517c"
+    },
+    {
+      "path": "official_code/src/instruction/change_case.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/change_case.py",
+      "bytes": 4607,
+      "sha256": "36013e1dfb27ddaf3478254de7a60502bf321e9e38a69065cd028fcabf21ea5f"
+    },
+    {
+      "path": "official_code/src/instruction/countable_items.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/countable_items.py",
+      "bytes": 2482,
+      "sha256": "318a3dae9085228f2459cba65d7f146f1835b6f7a4de4fc6227c4a0597df7b41"
+    },
+    {
+      "path": "official_code/src/instruction/end_with.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/end_with.py",
+      "bytes": 7266,
+      "sha256": "77eb6d2c306ea84397c0b7e78bceb4b3ac81b67137f87baced98246fcde47578"
+    },
+    {
+      "path": "official_code/src/instruction/existence.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/existence.py",
+      "bytes": 9256,
+      "sha256": "4fb65e1685269e954e412c5e3936c31b8c8edaa4a3ba68f310a9d1cf14773043"
+    },
+    {
+      "path": "official_code/src/instruction/forbidden.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/forbidden.py",
+      "bytes": 7748,
+      "sha256": "14b348d9769a20dd5b0dbaf13978422c29f27d04353f0b320b60efee00fd82dc"
+    },
+    {
+      "path": "official_code/src/instruction/format_instruction.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/format_instruction.py",
+      "bytes": 6617,
+      "sha256": "bb02c2156a9b912df29f9a5a6d138de3f5378da1a65d7fd6ddba054ab65da6ce"
+    },
+    {
+      "path": "official_code/src/instruction/instruction_utils.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/instruction_utils.py",
+      "bytes": 7982,
+      "sha256": "4e30941a6f3b76c3740c37c89f07505127a129e9e102f275d2ac8012e02acfd3"
+    },
+    {
+      "path": "official_code/src/instruction/length.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/length.py",
+      "bytes": 5748,
+      "sha256": "c9991456571d0662b6ed157ab5fa21579a3c975a73fbc4cb0b7cc5fa93c3b5e1"
+    },
+    {
+      "path": "official_code/src/instruction/punctuation.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/punctuation.py",
+      "bytes": 4431,
+      "sha256": "15d0e758e4d653824ceb46134d2d45e8bbf68e79550b040c31668573aac6756c"
+    },
+    {
+      "path": "official_code/src/instruction/start_with.py",
+      "url": "https://raw.githubusercontent.com/JiaQiSJTU/EvolIF/00be379c882c15353d43dbabe0bf91ee4152b6c8/src/instruction/start_with.py",
+      "bytes": 8039,
+      "sha256": "b2197068bd8ea274c132297544101817dd3d8234e64f0e53ee5f9195a85d9951"
+    },
+    {
+      "path": "official_data/README.md",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/README.md",
+      "bytes": 4026,
+      "sha256": "2b55b2c6d39218a2f8ba6308ca936e746905f7eb984bcee09af5b42ddca51d41"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_1.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_1.jsonl",
+      "bytes": 77412,
+      "sha256": "a43cf5e1c800c7fc0c3e4cd4389c50a328985cedbe8245f8e3e0289bd7e31a0a"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_10.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_10.jsonl",
+      "bytes": 70465,
+      "sha256": "7281320719da44412f1a40bc95fc76d77eba4e801d56c8bebb94a9dc032d3f6c"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_100.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_100.jsonl",
+      "bytes": 77732,
+      "sha256": "d31447a475604395633689dbd29062bf0b1f4f3282f01425b84616b375327edb"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_101.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_101.jsonl",
+      "bytes": 73182,
+      "sha256": "026b014faf9727267c1970d5ccff2cece5f7763926de8bac76e439adab036b65"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_102.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_102.jsonl",
+      "bytes": 84153,
+      "sha256": "a049254c9d20daf079428757fce3ffa3d914a934739b510c112250375eb18cae"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_103.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_103.jsonl",
+      "bytes": 116152,
+      "sha256": "bee29f9ad3659fa66f28f60dd563be606916c8b1dad36e6a189837b1760fd23d"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_106.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_106.jsonl",
+      "bytes": 68475,
+      "sha256": "fe61570fc646cc95221eeb48dff7d900f404822a630657d07608e41064a1fe6f"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_107.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_107.jsonl",
+      "bytes": 84156,
+      "sha256": "fcb1b9cbd6592535adbd31d5f813a04b8614928e3b74c68502e202e856413a55"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_108.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_108.jsonl",
+      "bytes": 82008,
+      "sha256": "8e6b49f5b1ba745ec935b53f584869a02ae631700e1122513c0cb04a3bd311a4"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_109.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_109.jsonl",
+      "bytes": 75435,
+      "sha256": "b5394d99492a4840942be5a30dd59f954a3819cbea545f62a596c0b4a26f825c"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_11.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_11.jsonl",
+      "bytes": 62864,
+      "sha256": "ad12b5acb202097036ec3f8537cbc554e3090b279ffc5da63f39297a1b55c26b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_110.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_110.jsonl",
+      "bytes": 80899,
+      "sha256": "ef9f0a1f5257d988d59f052f32224c534dcbd8f1c98c020b518cd503cf6bb1ba"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_111.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_111.jsonl",
+      "bytes": 89497,
+      "sha256": "f056dcfca3cbba4a6a12579e56efdedb2fc9521a8a5fbe6bd215f0e815b3f199"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_114.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_114.jsonl",
+      "bytes": 91480,
+      "sha256": "255fbee6df594e59be3078765949b3a741d758829fa6cdc9195e5a382b8fa5c4"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_116.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_116.jsonl",
+      "bytes": 73717,
+      "sha256": "abcf76ce086a55304f96c0a178ba172f51465bfef7d427d15c235e96af0f6264"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_118.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_118.jsonl",
+      "bytes": 83979,
+      "sha256": "16e82a4ecee7e0d66d5d0df6eb1069a03c7ccdd9a830ef2b08648feaa29b8d37"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_119.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_119.jsonl",
+      "bytes": 90338,
+      "sha256": "ac54bc537f827530dbf19a815b808cd60c895b33a105bf6f7a5eebb689b22135"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_12.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_12.jsonl",
+      "bytes": 65290,
+      "sha256": "8835a1c95f78e43b03e45022a0874b406f862d393e873d53117c5b2acbc3762e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_120.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_120.jsonl",
+      "bytes": 74232,
+      "sha256": "9c5a99c98e754c4a084e46b3a1382fa48b03e6104a3c91e62e8e53a0fa99e311"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_121.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_121.jsonl",
+      "bytes": 81839,
+      "sha256": "934bd19026cd738fa3b1d11bdcb2b1914663555fb8eb41b4957f6d623a5e0de9"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_122.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_122.jsonl",
+      "bytes": 92990,
+      "sha256": "fd993f6b6651761ddbd78f424f15ef1bc7930a212c56dfb47bf540d0dc005883"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_123.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_123.jsonl",
+      "bytes": 69404,
+      "sha256": "917ac448f67ce5f7f6721f4c9d71497cf2974941f5372c798f1dfe07d084e024"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_124.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_124.jsonl",
+      "bytes": 84871,
+      "sha256": "a6d184ad7750379a31d97fa93267a257248297226fc4f67c0960193ef5dc9532"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_125.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_125.jsonl",
+      "bytes": 77173,
+      "sha256": "2de1f63f75387c04321ddddf1c862cd5c2b25b3ed8fae7cf0e45943f3595bd0e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_126.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_126.jsonl",
+      "bytes": 86417,
+      "sha256": "166d2e3d0032df7f613284296e8ea3fd3a028662104680d26d813c77895dc8cc"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_127.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_127.jsonl",
+      "bytes": 89081,
+      "sha256": "770c09878a9131992036fb0f09fb91e524df737289358c08ffeb97c55e88ad6f"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_128.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_128.jsonl",
+      "bytes": 88901,
+      "sha256": "bcc8c60539f9f02031abadf336d43acaafcbdcf6614652ac6c0333dd22c0b252"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_129.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_129.jsonl",
+      "bytes": 81428,
+      "sha256": "ab7e05312418eca8b87283c05d8fec8dd6a2ea8608f1cbb2c91a14b07edfb978"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_131.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_131.jsonl",
+      "bytes": 94443,
+      "sha256": "19f04ab7b4a6a114e1dda7eacd8373e480ca7fe31451c2ef6f7d86b9f1c830e4"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_132.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_132.jsonl",
+      "bytes": 71834,
+      "sha256": "12a40db469ce1967616c7ab531e75c3110b9ae5f03fac87568aa4b8ad5222b4c"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_133.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_133.jsonl",
+      "bytes": 68066,
+      "sha256": "c90f250ccb2f7bd0ccc15ceea942eccc18aa5e52e63526742d62f02fa66d728e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_135.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_135.jsonl",
+      "bytes": 72150,
+      "sha256": "de2febf300b4eeacde727c4256ac831c7ba072fb7c0a5ff00b0d2c0a1a4242e4"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_136.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_136.jsonl",
+      "bytes": 75243,
+      "sha256": "1cb6d60efcc5b6bd66245eb130c0503971f9ab87ce20af62db88aa34ea26f273"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_137.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_137.jsonl",
+      "bytes": 73661,
+      "sha256": "3747c0a7cd6fdafe763b3b87d67166cd167b83034eca7e606fa84e919b74104b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_138.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_138.jsonl",
+      "bytes": 74802,
+      "sha256": "2257b724106d3831654d164361350c1f9adc1d52235e2e8050bf2693511d7e37"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_139.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_139.jsonl",
+      "bytes": 73607,
+      "sha256": "88e6ebc94600885cb2f7664547d3ce6eb8b14ddbd5898177a0a0a162f2bdf0d3"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_14.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_14.jsonl",
+      "bytes": 75330,
+      "sha256": "1843eefc87bbc8c20a1bc121267beeec03f54dfcd42065e7f5cd1a79ecbbcb77"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_142.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_142.jsonl",
+      "bytes": 64910,
+      "sha256": "f05cc99b46a9668f36080076de4dacc7f5b63ef86e030ce9dd9f67a8c21b9af9"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_144.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_144.jsonl",
+      "bytes": 86048,
+      "sha256": "78cf484cbf75869f0f2a79da7445ab8b342f4b46b13cb71c4916fe83fbac4a61"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_145.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_145.jsonl",
+      "bytes": 72392,
+      "sha256": "7a7d9d1a062711e5fb48be48349df434ab94418d0a099d51a026e10b1b308958"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_146.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_146.jsonl",
+      "bytes": 77162,
+      "sha256": "24eba0c8c165909269f026905c7bd41fe87f7e15a2a8336119c4e649f9786123"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_149.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_149.jsonl",
+      "bytes": 84645,
+      "sha256": "a57a8704f8888bedfd47d1d286154974ab0b543188daf3ad8b823fbee6c22dec"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_15.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_15.jsonl",
+      "bytes": 73276,
+      "sha256": "22fb7c7ebe0c40f6da2365a473c5d5da5d151b93994dcd3b956de414fd617a80"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_152.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_152.jsonl",
+      "bytes": 82107,
+      "sha256": "85eb533ad905175b8ee9d38f7897c7f946eb809f10dfcf5fdd47720b853fde9b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_154.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_154.jsonl",
+      "bytes": 88860,
+      "sha256": "b40cc5781c8d1caed00b7d0180d444abe1978fdd276542588b91fb4fb2038fc1"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_155.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_155.jsonl",
+      "bytes": 83683,
+      "sha256": "a78b1bc30fc7126828bfa15b7ac4da5f0187fc6aeed20866eab74b424f879898"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_156.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_156.jsonl",
+      "bytes": 105434,
+      "sha256": "d4cf856440ae56361e27b20fd46708bafa1b000d121f829cbd4ce4b6ea4ff500"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_158.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_158.jsonl",
+      "bytes": 76682,
+      "sha256": "a1b9fbd0d433e16d5951e4133cf27565a750d91cc9155bb50e86289afdc6e633"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_162.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_162.jsonl",
+      "bytes": 70889,
+      "sha256": "8a87f093287dd8fa10d0815c068f81e67e1286702c4aa36542fa87bfe379df74"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_163.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_163.jsonl",
+      "bytes": 74101,
+      "sha256": "0519eec49e5f608f454722b6798a5b0e02021321d048735a3572c4c0962c1a9f"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_166.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_166.jsonl",
+      "bytes": 84197,
+      "sha256": "f90960b517813bef926e8bc59e37269066e790249191d57fd472011726a9e926"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_167.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_167.jsonl",
+      "bytes": 82231,
+      "sha256": "6dcde955160fdb69694a2bee7646490243edee44b4288c971782863fa955a149"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_168.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_168.jsonl",
+      "bytes": 108380,
+      "sha256": "696952645285d8b10c5725ed3cc56cc243594ecb6e00285382c4d61c02f8d75f"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_169.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_169.jsonl",
+      "bytes": 72066,
+      "sha256": "5a1f66b3c25d00b8954c6966b059e1ccc42f85c62c4535d66aa22b897004e382"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_17.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_17.jsonl",
+      "bytes": 72163,
+      "sha256": "572dc657b3867812660f608085395438d7c9d73b951140e51bacc4d28735f633"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_170.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_170.jsonl",
+      "bytes": 74830,
+      "sha256": "589c5cbc0b7784af10bf0bcdae9d5fa8de329273d7be8ad53d0c2b1d365d2c8c"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_173.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_173.jsonl",
+      "bytes": 100167,
+      "sha256": "f72acaaf4e94eacc0ff05cd901f40bfa751e41155ccd670e921254b9d5d8261a"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_174.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_174.jsonl",
+      "bytes": 69295,
+      "sha256": "10362b021f28678a7def5688f8cd40b6f575c62c104e372b6510f7664cbf29db"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_177.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_177.jsonl",
+      "bytes": 73012,
+      "sha256": "35e2bc300ab71071ba6ac77f72fd0cb019ba0a08f7eee9eeafa9a73307be04ca"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_178.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_178.jsonl",
+      "bytes": 68094,
+      "sha256": "f855092625c29d63fe12bdba37fa1fc079ffd1f920cf922bb1b1556621ed68c5"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_18.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_18.jsonl",
+      "bytes": 71949,
+      "sha256": "f3f703d61af0427edaf75492f8ca35bc381e43c40c56d0e93c1ec96c23211d06"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_180.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_180.jsonl",
+      "bytes": 70238,
+      "sha256": "3e07e87bd2b2ac79ee136385609dc244b178a7bf57e4366326a0c202cfdc34e6"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_182.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_182.jsonl",
+      "bytes": 64740,
+      "sha256": "7207e2160ab559fda310cdceaf776ea3d334158f23e881034c63113a606c7ab6"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_183.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_183.jsonl",
+      "bytes": 76875,
+      "sha256": "0f8a0aa790fd86b7d77b3cbb7425a468ca8c69d4e095b6c6661d0d7d9cb54639"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_184.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_184.jsonl",
+      "bytes": 91278,
+      "sha256": "0b66f9541f04c9bd9a5968b6fdadb3918ebe3c8441d565902ea10739572b486d"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_185.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_185.jsonl",
+      "bytes": 75079,
+      "sha256": "6e4d5c01309c001c07ea6b124842d8998f75e503d846be6cccb71bf68a96876b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_186.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_186.jsonl",
+      "bytes": 71068,
+      "sha256": "d8255846470aac8769e64acededa9b09cca0128058eda50b4df1567cf08b46cb"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_187.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_187.jsonl",
+      "bytes": 75008,
+      "sha256": "8e5b3b33b35ae2a68813840c188f97b539a793786e4dca3c04d090f3e5eeacb0"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_188.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_188.jsonl",
+      "bytes": 75919,
+      "sha256": "9b40b4b3c203f542819aaa108d9edd453e2e6eb8bae43e234d28ec8cbc71d70c"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_189.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_189.jsonl",
+      "bytes": 67878,
+      "sha256": "2b45854c842839db202b1418a8a044692be554cc853dec91e55770f5d669247c"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_19.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_19.jsonl",
+      "bytes": 79822,
+      "sha256": "9805369c8ce9d976d019ec943ad2f47ebbc5fee8b64ed1336ae8b9bebead51be"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_190.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_190.jsonl",
+      "bytes": 73925,
+      "sha256": "85fea342adb7fca48b7029c5bda71749f2e07e722f64499474eb99b6c9465c32"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_191.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_191.jsonl",
+      "bytes": 77298,
+      "sha256": "4aa72c51167e6865fdc14d282e9f4f42941593ffe1ba09a9325455604637afa0"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_192.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_192.jsonl",
+      "bytes": 75987,
+      "sha256": "0d9b9e2de068b2e5ce74b164114ea9175e4f1da205eaf02d48a93896237d35d8"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_193.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_193.jsonl",
+      "bytes": 84895,
+      "sha256": "51a7e07801e08c57391e9d4654749329f83486739e71e53958e47e284e1f842d"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_194.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_194.jsonl",
+      "bytes": 73976,
+      "sha256": "6d62cac774a984ce826904ff953dc5275c1a40d53b7f2134614399803c62f81a"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_195.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_195.jsonl",
+      "bytes": 80167,
+      "sha256": "beac3e9ad7c9ec3e1f86583e3c65ef37f7ac0ebeb6f7dce09ec462d706bbf649"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_196.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_196.jsonl",
+      "bytes": 87370,
+      "sha256": "70c87227f2a782efb2f16f18a3f5fec5152e6c73b50692840cf6a605049727ec"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_197.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_197.jsonl",
+      "bytes": 68609,
+      "sha256": "85659d96946e05bc2231e9cb10aa529386e50840a039ee0b12bb8c58935ef6cf"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_2.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_2.jsonl",
+      "bytes": 78378,
+      "sha256": "a2e0809f0a18134e722eaa2c83cb1ca37c4fe3d4397d20510d383546c8590548"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_20.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_20.jsonl",
+      "bytes": 74773,
+      "sha256": "bbc73bf91427f6e3fd85a6ae6f599bf3fc0fa782fa39e75fd4eb813e030f7c66"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_200.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_200.jsonl",
+      "bytes": 89861,
+      "sha256": "c442f28ad59746f903499ca69990b766ea5567272a4458d8cd7c984beaad34b8"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_201.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_201.jsonl",
+      "bytes": 99597,
+      "sha256": "af4fb20af2779c76a2c6ea7c95c7cfb77aa5153937d30e26c8b1af01af22e583"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_202.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_202.jsonl",
+      "bytes": 77725,
+      "sha256": "5bb10b8e4ff9259b9e77cb0e4c6af7b055ffc8db92674445edddf1dd6367bd78"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_203.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_203.jsonl",
+      "bytes": 64439,
+      "sha256": "0c8fc674d505870d87e3d9bc3ce6a4dfdcdc3ed97fcce70d2ebd73719a2ab770"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_204.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_204.jsonl",
+      "bytes": 94421,
+      "sha256": "464e2f3e9a2187902099ef4a19a8afb3be51de2507bbd845b797443b7c962046"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_205.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_205.jsonl",
+      "bytes": 94839,
+      "sha256": "cd02aab32cca547b802ff2e18ab508a4261834c0932ae370e776bdb719d38320"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_23.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_23.jsonl",
+      "bytes": 60378,
+      "sha256": "312a9e491079ece2ae1e7f5f8fc03194b273d1fe6a3cec2725478c19496e1f99"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_24.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_24.jsonl",
+      "bytes": 91992,
+      "sha256": "78b4d8069bd2a91578b725f33784ad0a48fedf32194fa0fe8c60b8d2361d9091"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_25.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_25.jsonl",
+      "bytes": 70404,
+      "sha256": "43e3d69f1a0e1afa0776109f48b5b757674cb73c9403a03739fe2be65d6c966b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_26.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_26.jsonl",
+      "bytes": 70149,
+      "sha256": "e6651f68ed40273dd60eb864ec6cce91a0f03a023a5e14e801079d69878d4cd6"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_27.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_27.jsonl",
+      "bytes": 74113,
+      "sha256": "246d9f622d1cf02fec9a65fb9604a576e9977dbcc7dbb0390c7a766fc4ebb23e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_28.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_28.jsonl",
+      "bytes": 69792,
+      "sha256": "03d6eb1fc1f208755670781c18bd728373f2bbed20ed00045f15ad2389bb0bc0"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_3.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_3.jsonl",
+      "bytes": 71135,
+      "sha256": "c68d5ac8ef596d99ac762d0a93253641e313c908611d89942d751b0785ab1978"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_30.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_30.jsonl",
+      "bytes": 59094,
+      "sha256": "40188dad63e3cc3efc7189a6eee2983de6c927d2db523c860ff989056cdcc7d5"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_32.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_32.jsonl",
+      "bytes": 61771,
+      "sha256": "93a5df148da912f309fbdb67bcc3c593f28f89a1bb622b027dc3c563d818a056"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_34.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_34.jsonl",
+      "bytes": 71743,
+      "sha256": "2cae2b7e4ddec4ff1d671c7de8d02e83eb7376c8b47df3c5ba2b466530466ea0"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_36.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_36.jsonl",
+      "bytes": 71357,
+      "sha256": "0b63dd975591c7c34250d43855fc38ef019186266a456e40df3b50c8f31412e8"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_38.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_38.jsonl",
+      "bytes": 70036,
+      "sha256": "532bcab6f83918dc737393d720838b62fa762ddb40c63d9a54ae1ffff815767a"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_39.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_39.jsonl",
+      "bytes": 83217,
+      "sha256": "73ed78a0370de2a171a0de7ac472e21abeb7f78979d4f765ec40d84e7accca07"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_4.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_4.jsonl",
+      "bytes": 75954,
+      "sha256": "0caf698a8f8c8c61f26cda3e7dc398edfeb9473d6c8f35cf8fa05cbd828828b6"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_40.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_40.jsonl",
+      "bytes": 62906,
+      "sha256": "b6862e790f66964090a6929d654dc6c61d67fe54a1c72d8bcd68ef76257af2aa"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_41.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_41.jsonl",
+      "bytes": 74922,
+      "sha256": "cb8330613377bd9427816ebbc01eea09c61c6aebb8a1bfa787a7c34e92e69ae3"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_43.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_43.jsonl",
+      "bytes": 71786,
+      "sha256": "4e9f77b0aa6c57dcef1fad0d10d22ffeb28b88325ae1414bdda40273af5f37e0"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_44.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_44.jsonl",
+      "bytes": 59735,
+      "sha256": "43677df093748db6a1e4d10b8f044ebc982eb329f2ccd599ac686fbe71bc674b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_46.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_46.jsonl",
+      "bytes": 69324,
+      "sha256": "1965f70b15d4da66b1cffb2096243db0d86a3931c261fe8847029605c3162d2a"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_47.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_47.jsonl",
+      "bytes": 66274,
+      "sha256": "e4f68f178d25e7057c87ad0e5c039980b8aba08258f1fee3a4e80733dbe3e7c6"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_48.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_48.jsonl",
+      "bytes": 76872,
+      "sha256": "df1bf380698897fd7677d78fa90db5ce5100b5233250ccc7fec4da9795c76b68"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_5.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_5.jsonl",
+      "bytes": 75380,
+      "sha256": "f708055c16584620c3756d85a51cba24733094330c703f8ee5cdc208fc70f975"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_50.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_50.jsonl",
+      "bytes": 68763,
+      "sha256": "bc14e5a314f2d67cbddeb33659f7463c60730753dc7f839a627718ccb2175c66"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_51.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_51.jsonl",
+      "bytes": 80994,
+      "sha256": "2d5980abbe985d5e9c22acb9e086e11f7d34a0b7adba6abdbe0c36debac964fe"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_52.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_52.jsonl",
+      "bytes": 65930,
+      "sha256": "cae3f5d15fdc8ad541d0e9640ff1e963cea91b4e476f85cad3f131eb513db49b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_54.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_54.jsonl",
+      "bytes": 71041,
+      "sha256": "846c550f905f1e9ef9c972e26e0f03ee4cf4cc170236db823c781464f24c7b7d"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_55.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_55.jsonl",
+      "bytes": 84849,
+      "sha256": "f4944cbf1ecff2886e94788b63d437db02a3ee103796dd20d48c6845ec98d0a8"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_56.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_56.jsonl",
+      "bytes": 75020,
+      "sha256": "f9657b6f5a1fbcfa9eb9c2c6f11514cb921d8a5fa0a03127d5fd4c87ab859d4b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_58.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_58.jsonl",
+      "bytes": 73809,
+      "sha256": "df9285738f5c83c545d877e40807d1c6d2054c2563695764f57b89af176f0c49"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_59.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_59.jsonl",
+      "bytes": 69800,
+      "sha256": "60f1a376296d888467c900e559c16bdc24cdf9b64ec43e0124917a4980379d92"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_62.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_62.jsonl",
+      "bytes": 76858,
+      "sha256": "8f54eca1036e2cef7933b0f135e24b504ff91b7752429537f0328fa5dbf1b3aa"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_64.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_64.jsonl",
+      "bytes": 61057,
+      "sha256": "a068773c887f73cbeec671cc4501a766df683b04239aa9525dddc90540a42381"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_65.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_65.jsonl",
+      "bytes": 76203,
+      "sha256": "8924511439239747f0cbbbe9a3cdaee5a0583f026c7a01c45fca0c9b7f9c5d9d"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_66.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_66.jsonl",
+      "bytes": 72200,
+      "sha256": "42310d5e7ea89eebfa022517fd3d669d2ba5364aa8dcf510397f65f35e6e238e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_67.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_67.jsonl",
+      "bytes": 71642,
+      "sha256": "bdc3e005e3b9ff6cab4b24d5bacbcfa8e74ec9ae02c1fc4d5ec939dd8b3f8fd7"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_68.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_68.jsonl",
+      "bytes": 75088,
+      "sha256": "f588161a3957d9076f86436d0a18214a37f641b76a1927dbe945e2afd56ab345"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_69.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_69.jsonl",
+      "bytes": 71902,
+      "sha256": "931fcf0d68210ae28c1da2f528c3bfd92bce734638c294172ce13a929de60401"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_7.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_7.jsonl",
+      "bytes": 78966,
+      "sha256": "212327a2f900cee84b1d3a59072999b83c039c7a794727adc545e72429082b40"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_70.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_70.jsonl",
+      "bytes": 79115,
+      "sha256": "b97ff9707579e0e7ac5752a39d30726debc21ca8a95f85d73d70b80116038855"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_71.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_71.jsonl",
+      "bytes": 81893,
+      "sha256": "63332efa4bb2d5c0cf24124992db953dbdb32c19e9de2579aebe0f5507aafd57"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_73.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_73.jsonl",
+      "bytes": 71945,
+      "sha256": "9ec626e3a9b6ae21b4814e9b515a667b0add099630ec7d63e998f604accd326e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_74.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_74.jsonl",
+      "bytes": 70581,
+      "sha256": "d2822ba2fdea36f3a54182691dffd5611278dfe3b22fd26b1f37bc2d929bc7e9"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_75.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_75.jsonl",
+      "bytes": 74397,
+      "sha256": "67d4ca3b8164c5ab0367ed56a3f4d7c8cbdbf6e63f92a0fcf3dc5d6b8fc2e128"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_76.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_76.jsonl",
+      "bytes": 76701,
+      "sha256": "a687fe3ac1ac627df320f809e8e58b2b15e920453bce3a9c5affc6557a247f42"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_77.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_77.jsonl",
+      "bytes": 70459,
+      "sha256": "f58d87a0ca9727cf819d385dede1aa9752d51fa139f25be22d3b83b95e6eb0b0"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_79.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_79.jsonl",
+      "bytes": 54659,
+      "sha256": "fa768e16f1f303fe2d125a155df24db1ceb958a6594d351e6031c07e2403d88b"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_8.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_8.jsonl",
+      "bytes": 69336,
+      "sha256": "9ed3aa55a82e5e0cbc9460cc2710f374324575f65ea3ecdbf2a0101b98df6fee"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_80.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_80.jsonl",
+      "bytes": 86709,
+      "sha256": "095dd22b61bcb79df56475d14acb9408ec903a03b4eb434a2fcc96dfd5288428"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_81.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_81.jsonl",
+      "bytes": 69802,
+      "sha256": "99d16b6c32a544fadb7552b288a8f3ff317ed6c4af4798905df3c1bcecd39d13"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_82.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_82.jsonl",
+      "bytes": 80144,
+      "sha256": "194ce508c311972ef37d2f21d694feeff2d5e3fe2db030f4ca77781fc9d888a6"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_83.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_83.jsonl",
+      "bytes": 72057,
+      "sha256": "f7adad92cb4787c1e0a735bd89fb842f31b83b99b9c52fe2f2cd2767c8bdebd3"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_86.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_86.jsonl",
+      "bytes": 90901,
+      "sha256": "e23134dad95234faa5725da73fba0e556629ed965145a5c6c9053e9f95e57916"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_89.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_89.jsonl",
+      "bytes": 87112,
+      "sha256": "c59e1f3fa8541136eecb07443917b68e2ed359f505c336743a6f4b42cd6f26b2"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_9.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_9.jsonl",
+      "bytes": 68254,
+      "sha256": "0d65831d18d1246a8cb7c3ecd68a111f4a47b0bd91270bbc676ec8e3dac80eb5"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_91.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_91.jsonl",
+      "bytes": 80902,
+      "sha256": "73cc7f7ef2785036a1c0785729f2378549e0e54691c8786fc1e883a5cf4ac5f3"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_92.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_92.jsonl",
+      "bytes": 72647,
+      "sha256": "7d9bc9f72cbf66b87fe3d70dc26a8df9440ce621693abda543e04c80c9f1ffe3"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_93.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_93.jsonl",
+      "bytes": 85462,
+      "sha256": "26697b9e751c1c165b82c79b31e49134761d8dc01a6536637e35413b8333b698"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_94.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_94.jsonl",
+      "bytes": 97527,
+      "sha256": "e6b42716d0ae18ceaca0623d5f957f672bf0d746c3d2935b5f93e47a5619d5cb"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_95.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_95.jsonl",
+      "bytes": 81734,
+      "sha256": "37a83213a397db5db6e1319bc28e63867ba550d4ac989d105c4b8c14c44b3d73"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_96.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_96.jsonl",
+      "bytes": 77307,
+      "sha256": "b4acb59b10af840d53a33381f59d8584886389fe02e11864fa2c574c5c27ad55"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_97.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_97.jsonl",
+      "bytes": 71105,
+      "sha256": "9a1040f2c0227fb062dd46bddcdd95142a82783cbaa98693360ec983ad9b8040"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_98.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_98.jsonl",
+      "bytes": 89647,
+      "sha256": "29994fd29a11d256e30ed2e77b224467945f9da369851ffde7752c09107b511e"
+    },
+    {
+      "path": "official_data/dialog_v0.1/dialog_99.jsonl",
+      "url": "https://huggingface.co/datasets/KikiNLP/EvolIF/resolve/47115ae2af4830948f3f15697221a1acca6078a7/dialog_v0.1/dialog_99.jsonl",
+      "bytes": 67338,
+      "sha256": "92aece204077a0941f54b8f2c85c438bea4d88cb44edda9e5c75801a67e95b91"
+    },
+    {
+      "path": "models/Qwen3-4B-Instruct-2507/config.json",
+      "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/cdbee75f17c01a7cc42f958dc650907174af0554/config.json",
+      "bytes": 727,
+      "sha256": "5beea1a4a34c62782bfb2f911c606741a3bab8f92d80a118fa053c28af12e8ba"
+    },
+    {
+      "path": "models/Qwen3-4B-Instruct-2507/tokenizer_config.json",
+      "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/cdbee75f17c01a7cc42f958dc650907174af0554/tokenizer_config.json",
+      "bytes": 9377,
+      "sha256": "a62ff0a2472a0fa1b8eaabcb57c59b58afa42a22831dc141400b6e0cf2b65ce3"
+    },
+    {
+      "path": "models/Qwen3-4B-Instruct-2507/README.md",
+      "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/cdbee75f17c01a7cc42f958dc650907174af0554/README.md",
+      "bytes": 8168,
+      "sha256": "8e3dd0c3b5b11897cc71092ccfe517bb7a9783479baa3665aad73c8d1a2041cd"
+    },
+    {
+      "path": "models/Qwen3-4B-Instruct-2507/generation_config.json",
+      "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/cdbee75f17c01a7cc42f958dc650907174af0554/generation_config.json",
+      "bytes": 238,
+      "sha256": "835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48"
+    }
+  ]
+}

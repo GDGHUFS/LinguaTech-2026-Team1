@@ -1,52 +1,16 @@
-# 개인 설정과 비밀값 (예: API 키)
-.env
-.env.*
-!.env.example
-
-# 로컬 Python 실행 환경
+.local/
 .venv/
-venv/
-env/
-
-# Python이 자동 생성하는 파일
+.venv-*/
 __pycache__/
 *.py[cod]
-*.egg-info/
-build/
-dist/
-
-# 테스트와 분석 도구의 임시 파일
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-.ipynb_checkpoints/
+.env
+.env.*
 
-# 원본·가공 데이터: 폴더 표시용 .gitkeep만 추적
-data/raw/*
-!data/raw/.gitkeep
-data/annotated/*
-!data/annotated/.gitkeep
-data/generated/*
-!data/generated/.gitkeep
-data/labeled/*
-!data/labeled/.gitkeep
-data/splits/*
-!data/splits/.gitkeep
-
-# 학습 결과: 폴더 표시용 .gitkeep만 추적
-outputs/checkpoints/*
-!outputs/checkpoints/.gitkeep
-outputs/predictions/*
-!outputs/predictions/.gitkeep
-outputs/reports/*
-!outputs/reports/.gitkeep
-# [B] 원본 데이터와 비확정 생성 데이터(unlabeled generation)는 Git에 포함하지 않는다.
-/data/raw/**
-/data/annotated/**
-/data/generated/**
-/data/labeled/**
-/data/splits/**
-/outputs/baselines/**
-/outputs/model-cache/
+# Generated data, checkpoints and experiment outputs stay local.
+/data/**
+!/data/**/
+!/data/**/.gitkeep
+/outputs/**
+!/outputs/**/
+!/outputs/**/.gitkeep

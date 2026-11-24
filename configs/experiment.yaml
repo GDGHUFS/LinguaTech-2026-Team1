@@ -1,0 +1,40 @@
+seed: 42
+paths:
+  data: data
+  output: outputs
+source:
+  dataset_revision: 47115ae2af4830948f3f15697221a1acca6078a7
+  repository_commit: 00be379c882c15353d43dbabe0bf91ee4152b6c8
+  license: CC-BY-NC-4.0
+target:
+  model_id: Qwen/Qwen3-4B-Instruct-2507
+  revision: cdbee75f17c01a7cc42f958dc650907174af0554
+  freeze: true
+  dtype: bfloat16
+  batch_size: 1
+  do_sample: false
+  max_new_tokens: 1024
+  max_context_tokens: 8192
+  use_cache: true
+  trust_remote_code: false
+  system_prompt: null
+training:
+  seed: 42
+  optimizer: Adam
+  learning_rate: 0.001
+  batch_size: 64
+  max_epochs: 100
+  patience: 10
+  l2_lambda: 0.0001
+  class_weighting: false
+  oversampling: false
+  scheduler: null
+  gradient_clipping: null
+  precision: float32
+  selection_metric: validation_ap
+  selection_tiebreaker: validation_brier
+  early_stopping_min_delta: 0.0
+evaluation:
+  bootstrap_repetitions: 2000
+  bootstrap_seed: 42
+  ece_bins: 10
