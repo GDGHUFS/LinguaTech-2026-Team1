@@ -16,6 +16,7 @@ from .representation import SampleCache
 from .probes import PROBES
 from .metrics import metrics, select_threshold
 from .baselines import build_baselines, baseline_input
+from .training_selection import patience_improved
 
 
 def seed_all():
@@ -55,8 +56,11 @@ def fit_probe(name, train_features, train_y, validation_features, validation_y, 
     loader = DataLoader(dataset, batch_size=cfg['batch_size'], shuffle=True,
                         generator=generator, num_workers=0)
     best, best_state, wait, history = None, None, 0, []
+    patience_reference = None
+    min_delta = cfg['early_stopping_min_delta']
+    patience_improved((0., 0.), None, min_delta)  # Validate before fitting.
     provenance = provenance or {}
-    signature = digest({'name':name, 'config':cfg, 'provenance':provenance,
+    signature = digest({'protocol':'conshift-training-v3', 'name':name, 'config':cfg, 'provenance':provenance,
         'tensors':[{'shape':list(t.shape), 'sha256':hashlib.sha256(t.detach().cpu().contiguous().numpy().tobytes()).hexdigest()}
                    for t in (*train_features,train_y,*validation_features,validation_y)]})
     last_path = Path(checkpoint_dir) / (name + '.last.pt') if checkpoint_dir is not None else None
@@ -77,6 +81,7 @@ def fit_probe(name, train_features, train_y, validation_features, validation_y, 
         np.random.set_state((ns[0],np.asarray(ns[1],dtype=np.uint32),ns[2],ns[3],ns[4]))
         best, best_state, best_epoch = tuple(state['best_rank']),state['best_state'],state['best_epoch']
         wait, history = state['stale_epochs'],state['history']
+        patience_reference = tuple(state['patience_reference'])
         start_epoch, elapsed_before, finished = state['epoch'] + 1,state['elapsed_seconds'],state['finished']
     elif best_path is not None and best_path.exists():
         raise Blocked('Best checkpoint exists without resumable last checkpoint')
@@ -92,28 +97,55 @@ def fit_probe(name, train_features, train_y, validation_features, validation_y, 
             loss.backward()
             optimizer.step()
             losses.append(float(loss.detach()))
-        probabilities = predict_probe(model, validation_features)
+        model.eval()
+        with torch.inference_mode():
+            train_logits = model(*train_features)
+            validation_logits = model(*validation_features)
+            train_bce = float(F.binary_cross_entropy_with_logits(train_logits, train_y))
+            validation_bce = float(F.binary_cross_entropy_with_logits(validation_logits, validation_y))
+            train_probabilities = train_logits.sigmoid().cpu().numpy()
+            probabilities = validation_logits.sigmoid().cpu().numpy()
+        train_result = metrics(train_y.numpy(), train_probabilities, .5)
         result = metrics(validation_y.numpy(), probabilities, .5)
         rank = (result['AP'], -result['Brier'])
         history.append({'epoch': epoch, 'mean_batch_loss': float(np.mean(losses)),
-                        'validation_ap': result['AP'], 'validation_brier': result['Brier']})
+                        'train_bce': train_bce, 'validation_bce': validation_bce,
+                        'train_ap': train_result['AP'], 'validation_ap': result['AP'],
+                        'train_brier': train_result['Brier'], 'validation_brier': result['Brier'],
+                        'train_minus_validation_ap': train_result['AP'] - result['AP'],
+                        'validation_minus_train_bce': validation_bce - train_bce,
+                        'validation_minus_train_brier': result['Brier'] - train_result['Brier']})
         if best is None or rank > best:
-            best, best_state, best_epoch, wait = rank, copy.deepcopy(model.state_dict()), epoch, 0
+            best, best_state, best_epoch = rank, copy.deepcopy(model.state_dict()), epoch
             improved = True
         else:
-            wait += 1
             improved = False
+        reset_patience = patience_improved(rank, patience_reference, min_delta)
+        if reset_patience:
+            patience_reference, wait = rank, 0
+        else:
+            wait += 1
+        history[-1].update(best_checkpoint_improved=improved,
+                           patience_reset=reset_patience, stale_epochs=wait)
         finished = wait >= cfg['patience'] or epoch == cfg['max_epochs']
         elapsed = elapsed_before + time.perf_counter() - started
         if last_path is not None:
             ns = np.random.get_state()
-            state = {'schema':'conshift-training-v2','signature':signature,'epoch':epoch,
+            state = {'schema':'conshift-training-v3','signature':signature,'epoch':epoch,
                 'state_dict':copy.deepcopy(model.state_dict()),'optimizer_state':optimizer.state_dict(),
                 'generator_state':generator.get_state(),'torch_rng_state':torch.get_rng_state(),
                 'python_rng_state':random.getstate(),
                 'numpy_rng_state':(ns[0],ns[1].tolist(),ns[2],ns[3],ns[4]),
                 'best_rank':best,'best_state':best_state,'best_epoch':best_epoch,
-                'stale_epochs':wait,'history':history,'elapsed_seconds':elapsed,'finished':finished}
+                'stale_epochs':wait,'patience_reference':patience_reference,
+                'history':history,'elapsed_seconds':elapsed,'finished':finished}
+            epoch_checkpoint = {'state_dict':copy.deepcopy(model.state_dict()),'metadata':{
+                **provenance,'model_name':name,'hidden_dim':train_features[0].shape[-1],
+                'threshold':select_threshold(validation_y.numpy(),probabilities),
+                'threshold_source':'validation','epoch':epoch,'validation_ap':rank[0],
+                'validation_brier':-rank[1],'training_config':cfg,'run_signature':signature,
+                'parameter_count':sum(p.numel() for p in model.parameters())}}
+            save_torch(Path(checkpoint_dir) / 'epochs' / f'{name}.epoch-{epoch:03d}.pt', epoch_checkpoint)
             save_torch(last_path,state)
             if improved:
                 save_torch(best_path,{'state_dict':best_state,'metadata':{

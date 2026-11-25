@@ -79,7 +79,8 @@ def test_generation_retries_once_and_blocks_dependents(setup_collection,monkeypa
 def test_context_overflow_never_truncates_or_generates(setup_collection,monkeypatch):
     cfg,data,rows,events,target = setup_collection
     def too_long(self,history):
-        return '',{'input_ids':torch.ones(1,8192,dtype=torch.long),'attention_mask':torch.ones(1,8192,dtype=torch.long)}
+        length = cfg['target']['max_context_tokens']
+        return '',{'input_ids':torch.ones(1,length,dtype=torch.long),'attention_mask':torch.ones(1,length,dtype=torch.long)}
     monkeypatch.setattr(target,'prepare',too_long)
     collect(cfg)
     assert 'generate' not in events and 'extract' not in events

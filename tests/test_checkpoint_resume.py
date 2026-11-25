@@ -36,7 +36,15 @@ def test_interrupted_training_restores_optimizer_rng_shuffle_and_best(tmp_path,m
     actual,meta,history = fit_probe('conshift',features,labels,features,labels,cfg,checkpoint_dir=tmp_path,resume=True)
     assert np.array_equal(predict_probe(expected,features),predict_probe(actual,features))
     assert expected_history == history
+    assert all({'train_bce','validation_bce','train_ap','validation_ap',
+                'train_minus_validation_ap','validation_minus_train_bce'} <= epoch.keys()
+               for epoch in history)
     assert meta['epoch'] == expected_meta['epoch'] and meta['threshold'] == expected_meta['threshold']
+    archived = sorted((tmp_path / 'epochs').glob('conshift.epoch-*.pt'))
+    assert len(archived) == len(history)
+    selected, selected_meta = load_probe(tmp_path / 'epochs' / f"conshift.epoch-{meta['epoch']:03d}.pt")
+    assert selected_meta['threshold'] == meta['threshold']
+    assert np.array_equal(predict_probe(selected,features),predict_probe(actual,features))
     best,best_meta = load_probe(tmp_path/'conshift.best.pt')
     assert np.array_equal(predict_probe(best,features),predict_probe(actual,features))
     assert best_meta['threshold'] == meta['threshold']
@@ -44,6 +52,30 @@ def test_interrupted_training_restores_optimizer_rng_shuffle_and_best(tmp_path,m
     loaded,loaded_meta,loaded_history = fit_probe('conshift',features,labels,features,labels,cfg,checkpoint_dir=tmp_path,resume=True)
     assert history == loaded_history and loaded_meta['epochs_completed'] == len(history)
     assert np.array_equal(predict_probe(actual,features),predict_probe(loaded,features))
+
+
+def test_small_ap_improvements_save_best_without_resetting_patience(tmp_path, monkeypatch):
+    import src.training as training
+    features, labels, cfg = inputs()
+    cfg = {**cfg, 'max_epochs':8, 'patience':2, 'early_stopping_min_delta':.001}
+    real_metrics = training.metrics
+    calls = 0
+    def validation_curve(y, p, threshold):
+        nonlocal calls
+        result = real_metrics(y, p, threshold)
+        epoch = calls // 2
+        if calls % 2:
+            result.update(AP=.5 + epoch * .0004, Brier=.2 - epoch * .01)
+        calls += 1
+        return result
+    monkeypatch.setattr(training, 'metrics', validation_curve)
+    _, meta, history = fit_probe('p1',features,labels,features,labels,cfg,checkpoint_dir=tmp_path)
+    assert len(history) == 3 and meta['early_stopped']
+    assert meta['epoch'] == 3  # Best checkpoint still tracks small gains.
+    assert [row['patience_reset'] for row in history] == [True, False, False]
+    assert history[-1]['stale_epochs'] == 2
+    state = torch.load(tmp_path / 'p1.last.pt', weights_only=True)
+    assert tuple(state['patience_reference']) == (.5, -.2)
 
 
 def test_training_resume_rejects_changed_data_or_settings(tmp_path):

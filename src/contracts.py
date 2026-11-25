@@ -73,7 +73,7 @@ def config(path):
             or t['trust_remote_code'] or len(t['revision']) != 40):
         raise Blocked('Invalid frozen Target contract')
     expected = {'model_id':'Qwen/Qwen3-4B-Instruct-2507', 'dtype':'bfloat16',
-                'max_new_tokens':1024, 'max_context_tokens':8192, 'use_cache':True,
+                'max_new_tokens':1024, 'max_context_tokens':131072, 'use_cache':True,
                 'system_prompt':None}
     if any(t.get(k) != v for k,v in expected.items()):
         raise Blocked('Target configuration differs from registered protocol')
@@ -81,7 +81,7 @@ def config(path):
         'max_epochs':100, 'patience':10, 'l2_lambda':.0001, 'class_weighting':False,
         'oversampling':False, 'scheduler':None, 'gradient_clipping':None,
         'precision':'float32', 'selection_metric':'validation_ap',
-        'selection_tiebreaker':'validation_brier', 'early_stopping_min_delta':0.}
+        'selection_tiebreaker':'validation_brier', 'early_stopping_min_delta':0.001}
     if any(cfg['training'].get(k) != v for k,v in expected_training.items()):
         raise Blocked('Training configuration differs from registered protocol')
     if cfg['evaluation'] != {'bootstrap_repetitions':2000, 'bootstrap_seed':42, 'ece_bins':10}:
