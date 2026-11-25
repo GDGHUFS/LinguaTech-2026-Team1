@@ -18,8 +18,11 @@ class FrozenTarget:
     def __init__(self, cfg):
         if not torch.cuda.is_available():
             raise Blocked('CUDA_GPU_NOT_AVAILABLE: full Target inference is disabled on CPU')
-        from transformers import AutoTokenizer, AutoModelForCausalLM
         self.cfg = cfg['target']
+        # Set the allocator limit before loading weights onto the current GPU.
+        torch.cuda.set_per_process_memory_fraction(
+            self.cfg['gpu_memory_fraction'], device=torch.cuda.current_device())
+        from transformers import AutoTokenizer, AutoModelForCausalLM
         self.dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         self.tokenizer = AutoTokenizer.from_pretrained(self.cfg['model_id'], revision=self.cfg['revision'], trust_remote_code=False)
         self.model = AutoModelForCausalLM.from_pretrained(

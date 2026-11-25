@@ -69,6 +69,10 @@ def config(path):
     if cfg['seed'] != 42 or cfg['training']['seed'] != 42:
         raise Blocked('Only seed 42 is authorized')
     t = cfg['target']
+    fraction = t.get('gpu_memory_fraction')
+    if (isinstance(fraction, bool) or not isinstance(fraction, (int, float))
+            or not 0 < fraction <= 1):
+        raise Blocked('gpu_memory_fraction must be in (0, 1]')
     if (not t['freeze'] or t['do_sample'] or t['batch_size'] != 1
             or t['trust_remote_code'] or len(t['revision']) != 40):
         raise Blocked('Invalid frozen Target contract')

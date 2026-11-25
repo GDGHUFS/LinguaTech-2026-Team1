@@ -11,6 +11,7 @@ target:
   revision: cdbee75f17c01a7cc42f958dc650907174af0554
   freeze: true
   dtype: bfloat16
+  gpu_memory_fraction: 0.98
   batch_size: 1
   do_sample: false
   max_new_tokens: 1024

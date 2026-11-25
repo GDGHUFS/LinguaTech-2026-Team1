@@ -28,6 +28,7 @@ def test_context128k_protocol_and_isolated_paths(tmp_path):
     import yaml
     cfg = config(ROOT / 'configs/experiment.yaml')
     assert cfg['target']['max_context_tokens'] == 131072
+    assert cfg['target']['gpu_memory_fraction'] == .98
     assert cfg['training']['early_stopping_min_delta'] == .001
     assert cfg['paths']['data'] == str(ROOT / 'data/runs/context128k')
     assert cfg['paths']['output'] == str(ROOT / 'outputs/runs/context128k')
@@ -35,4 +36,15 @@ def test_context128k_protocol_and_isolated_paths(tmp_path):
     path = tmp_path / 'old.yaml'
     path.write_text(yaml.safe_dump(cfg), encoding='utf-8')
     with pytest.raises(Blocked, match='registered protocol'):
+        config(path)
+
+
+@pytest.mark.parametrize('fraction', [0, -.1, 1.01, True, '0.98', None, float('nan')])
+def test_invalid_gpu_memory_fraction_rejected(tmp_path, fraction):
+    import yaml
+    cfg = config(ROOT / 'configs/experiment.yaml')
+    cfg['target']['gpu_memory_fraction'] = fraction
+    path = tmp_path / 'invalid.yaml'
+    path.write_text(yaml.safe_dump(cfg), encoding='utf-8')
+    with pytest.raises(Blocked, match='gpu_memory_fraction'):
         config(path)
