@@ -2,7 +2,9 @@
 
 프로젝트 루트에서 실행합니다. Target은 동결한 `Qwen/Qwen3-4B-Instruct-2507`이며 CUDA를 사용할 수 있는 NVIDIA GPU가 필요합니다. Probe와 baseline만 학습하며 Target은 fine-tuning하지 않습니다. `system_prompt: null`로 별도의 system 메시지를 넣지 않습니다. 새 사용자 대화나 가상 실험 결과는 생성하지 않습니다.
 
-기본 설정은 context 131,072, 최소 AP 개선량 0.001인 새 run입니다. 데이터는 `data/runs/context128k/`, 결과는 `outputs/runs/context128k/`에 저장하여 기존 8,192 pilot을 보존합니다. 기존 cache·checkpoint를 새 경로로 복사해서 재개하지 않습니다. 코드를 확정한 뒤 pilot부터 시작하고 제외율과 GPU 메모리를 확인합니다. Context가 늘면 기존 12~13시간 추정은 다시 측정해야 합니다.
+기본 설정은 context **57,344 (56K)**, 최소 AP 개선량 0.001인 새 run입니다. 데이터는 `data/runs/context56k/`, 결과는 `outputs/runs/context56k/`에 저장하여 기존 8K 및 131K pilot과 분리합니다. 이번 실행은 전체 turn의 일부 제외를 허용하는 조건이며 모든 대화의 100% 보존 실험이 아닙니다. 매 응답에 1,024 token을 잡은 보수적 예산에서는 7,517/7,620 turn(98.65%), 144/150 trajectory(96%)를 포함할 수 있습니다. 실제 응답 길이와 제외율은 실행 후 보고합니다. 기존 cache·checkpoint를 새 경로로 복사해서 재개하거나 진행 중인 pilot의 설정을 중간에 바꾸지 않습니다.
+
+현재 추가된 효율화는 동결 Target·cache 재사용·CPU probe 학습·L2 탐색 등입니다. vLLM, prefix 재사용, 모든 층 hidden state·전체 logits 반환 제거는 아직 구현하지 않았습니다. Context 상한을 131K에서 56K로 줄여도 실제 입력에 상한까지 padding하지 않으므로 시간·메모리가 비례해서 줄지는 않습니다. 56K를 넘는 후반 turn이 생략될 때 그만큼 줄어들며, 모든 실제 prompt가 이미 56K 이하면 처리량 차이가 거의 없을 수 있습니다. 기존 이틀 추정은 실측으로 다시 계산합니다.
 
 ## 환경과 의존성
 
@@ -10,7 +12,7 @@
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m nltk.downloader -d data/runs/context128k/raw/nltk_data -e punkt punkt_tab
+python -m nltk.downloader -d data/runs/context56k/raw/nltk_data -e punkt punkt_tab
 python -c 'import torch; print(torch.__version__, torch.cuda.is_available())'
 ```
 
@@ -121,7 +123,7 @@ python scripts/05_train.py --config configs/experiment.yaml --resume
 python scripts/06_evaluate.py --config configs/experiment.yaml --resume
 ```
 
-단계 진행 상태와 차단 사유는 실행 시 `outputs/runs/context128k/reports/progress.json`에 기록합니다. 원본이 이미 있으면 audit의 `--fetch`를 생략할 수 있습니다.
+단계 진행 상태와 차단 사유는 실행 시 `outputs/runs/context56k/reports/progress.json`에 기록합니다. 원본이 이미 있으면 audit의 `--fetch`를 생략할 수 있습니다.
 
 ## 입력과 버전 고정
 
@@ -129,11 +131,11 @@ python scripts/06_evaluate.py --config configs/experiment.yaml --resume
 |---|---|
 | `configs/experiment.yaml` | Target revision·생성 설정·학습 설정·평가 설정·입출력 경로 |
 | `configs/sources.json` | 공식 EvolIF 파일·checker 코드·Target 설정의 URL·revision·SHA-256 |
-| `data/runs/context128k/raw/official_data/dialog_v0.1/` | 공식 원본 trajectory JSONL |
-| `data/runs/context128k/raw/official_code/` | 고정된 공식 checker와 대화 경계 근거 |
-| `data/runs/context128k/raw/target_metadata/` | 고정 모델의 config·tokenizer 설정 |
-| `data/runs/context128k/normalized/turns.jsonl` | 원본 `user_query_verified`를 그대로 유지한 정규화 레코드 |
-| `data/runs/context128k/manifests/` | 실행 시 생성되는 source·split·collection lock |
+| `data/runs/context56k/raw/official_data/dialog_v0.1/` | 공식 원본 trajectory JSONL |
+| `data/runs/context56k/raw/official_code/` | 고정된 공식 checker와 대화 경계 근거 |
+| `data/runs/context56k/raw/target_metadata/` | 고정 모델의 config·tokenizer 설정 |
+| `data/runs/context56k/normalized/turns.jsonl` | 원본 `user_query_verified`를 그대로 유지한 정규화 레코드 |
+| `data/runs/context56k/manifests/` | 실행 시 생성되는 source·split·collection lock |
 
 Dataset revision은 `47115ae2af4830948f3f15697221a1acca6078a7`, checker repository commit은 `00be379c882c15353d43dbabe0bf91ee4152b6c8`, model/tokenizer revision은 `cdbee75f17c01a7cc42f958dc650907174af0554`입니다. 버전 고정은 데이터·checker 변경 및 서로 다른 cache의 혼용을 방지합니다. GitHub commit이나 hash는 성능 수치가 아닙니다.
 
@@ -143,11 +145,11 @@ Git으로 전달되는 `data/`에는 폴더 유지용 `.gitkeep`만 포함됩니
 
 ## 응답 수집과 라벨
 
-Context 길이는 고정 Qwen tokenizer로 공식 원본 150개 trajectory / 7,620 turn을 측정하여 결정했습니다. 144개는 50 turn, 6개는 70 turn입니다. 가장 긴 `dialog_103`은 사용자 발화 합계 4,470 token, 빈 assistant frame을 포함한 마지막 prompt 5,168 token입니다. 모든 이전 응답과 현재 응답 예약에 각각 최대 1,024 token을 잡으면 총 76,848 token입니다. 65,536에서는 이 예산 기준 70-turn trajectory 6개가 끝까지 들어가지 않으므로 131,072를 사용합니다. 원본에는 실제 Target 응답이 없어 이는 응답 예산에 따른 계산이며, 실제 decode 후 재토큰화된 history 길이와 GPU 메모리는 실행 시 확인합니다. Context 상한을 늘려도 생성 출력 상한은 여전히 1,024이므로 OUTPUT_TRUNCATED 제외는 별개입니다.
+Context 길이는 고정 Qwen tokenizer로 공식 원본 150개 trajectory / 7,620 turn을 측정하여 결정했습니다. 144개는 50 turn, 6개는 70 turn입니다. 가장 긴 `dialog_103`은 사용자 발화 합계 4,470 token, 빈 assistant frame을 포함한 마지막 prompt 5,168 token입니다. 모든 응답에 각각 최대 1,024 token을 잡은 전체 예산 최대는 76,848 token입니다. 현재는 비용과 일부 제외 허용 조건을 반영해 57,344를 채택합니다. 이 예산에서는 70-turn trajectory 6개의 후반부 일부가 제외됩니다. 원본에는 실제 Target 응답이 없어 계산상 포함률은 실측 결과가 아니며, 실제 decode 후 재토큰화된 history와 GPU 메모리는 실행 시 확인합니다. 생성 출력 상한은 여전히 1,024이므로 OUTPUT_TRUNCATED 제외는 별개입니다.
 
 각 trajectory에서 원본 사용자 발화와 동일 Target의 실제 이전 응답으로 history를 구성합니다. 현재 응답 생성 전에 마지막 non-padding prompt token의 최종 반환 hidden state를 추출합니다. Prompt 및 token hash, 모델·tokenizer·template·dtype·코드·패키지 버전이 cache와 일치해야 재사용합니다.
 
-기술 오류는 같은 설정으로 한 번 재시도합니다. Prompt 길이+최대 생성 길이 1024가 131072를 초과하면 자르지 않고 해당 turn과 후속 의존 turn을 제외합니다. 생성된 응답의 truncation은 그 turn의 라벨을 제외하고 history는 유지합니다.
+기술 오류는 같은 설정으로 한 번 재시도합니다. Prompt 길이+최대 생성 길이 1024가 57344를 초과하면 자르지 않고 해당 turn과 후속 의존 turn을 제외합니다. 생성된 응답의 truncation은 그 turn의 라벨을 제외하고 history는 유지합니다.
 
 공식 deterministic checker 9종을 사용합니다. 모든 제약 PASS이면 0, UNKNOWN 없이 FAIL이 하나 이상이면 1입니다. Judge가 필요한 emotion/reader_age/style, checker 오류, 활성 제약 없음, truncation은 주 cohort에서 제외합니다. 첫 turn과 현재 또는 직전 표현이 누락된 turn도 제외합니다. 원본의 `instruction_success`·`topic_success`는 Target failure label로 사용하지 않습니다.
 
@@ -157,7 +159,7 @@ Context 길이는 고정 Qwen tokenizer로 공식 원본 150개 trajectory / 7,6
 
 동일·파생 trajectory를 group으로 묶고, OOD 조합을 먼저 holdout한 뒤 seed=42로 train/validation/ID test를 70/15/15 비율로 정수 배정합니다. OOD 후보는 서로 다른 instruction ID 2개 이상, 최소 20개 group에서 관측되는 조합입니다. Holdout 이후 각 구성 ID가 train에 남는 후보 중 group 수가 가장 많은 조합 하나를 선택하고 동률이면 사전순으로 정합니다. OOD 조합이 나타나는 group 전체를 격리하며, 평가에는 해당 조합을 실제로 가진 적격 turn만 포함합니다.
 
-`outputs/runs/context128k/reports/label_coverage.json`에서 다음 조건을 검사합니다.
+`outputs/runs/context56k/reports/label_coverage.json`에서 다음 조건을 검사합니다.
 
 | Split | 양성·음성 turn 각각 | 해당 class 포함 group 각각 |
 |---|---:|---:|
@@ -186,7 +188,7 @@ P1/T1/ConShift 각각 동일한 L2 후보 4개를 seed 42, Adam lr 0.001, batch 
 
 Epoch 로그에는 train/validation의 AP·BCE·Brier, train–validation AP 차이, validation–train BCE·Brier 차이와 patience 초기화 여부·stale epoch 수를 기록합니다. BCE는 epoch 종료 시 동일한 모델로 계산한 정규화 항 제외 loss입니다. 이 기록으로 train 성능만 개선되고 validation 성능은 악화되는지 확인합니다. L2·early stopping·group 분리는 과적합 위험을 줄이는 장치이며 과적합이 없음을 보장하지 않습니다. `early_stopping_min_delta=0.001`이며 마지막 patience 초기화 시점 대비 validation AP가 0.001 이상 증가해야 patience를 초기화합니다. 작은 AP 개선은 누적해서 판단하며 Brier 개선만으로는 초기화하지 않습니다. Best checkpoint는 중단 기준과 별개로 실제 validation AP 최대 → Brier 최소 → 이른 epoch 순서로 계속 저장합니다.
 
-각 probe의 매 epoch 가중치도 `outputs/runs/context128k/checkpoints/search/conshift/l2-00/checkpoints/epochs/conshift.epoch-012.pt` 같은 경로에 보관합니다. 각 파일에는 해당 epoch의 validation 기반 threshold와 provenance가 포함됩니다. Train/validation 곡선을 보고 자동 best와 다른 epoch를 수동 선택할 수 있습니다. Epoch와 threshold 선택은 test를 보기 전에 확정합니다. 기본 평가 명령은 계속 자동 선택된 최종 checkpoint를 사용하므로, 수동 선택 시에는 선택한 epoch와 이유를 기록하고 해당 checkpoint로 평가 경로를 구성해야 합니다. 이미 평가한 run의 checkpoint를 덮어쓰거나 기존 평가 cache와 혼용하지 않습니다. BCE는 이진 분류의 cross entropy이고 AP는 average precision입니다.
+각 probe의 매 epoch 가중치도 `outputs/runs/context56k/checkpoints/search/conshift/l2-00/checkpoints/epochs/conshift.epoch-012.pt` 같은 경로에 보관합니다. 각 파일에는 해당 epoch의 validation 기반 threshold와 provenance가 포함됩니다. Train/validation 곡선을 보고 자동 best와 다른 epoch를 수동 선택할 수 있습니다. Epoch와 threshold 선택은 test를 보기 전에 확정합니다. 기본 평가 명령은 계속 자동 선택된 최종 checkpoint를 사용하므로, 수동 선택 시에는 선택한 epoch와 이유를 기록하고 해당 checkpoint로 평가 경로를 구성해야 합니다. 이미 평가한 run의 checkpoint를 덮어쓰거나 기존 평가 cache와 혼용하지 않습니다. BCE는 이진 분류의 cross entropy이고 AP는 average precision입니다.
 
 `05_train.py --resume`은 완료 모델을 재학습하지 않고 중단된 동일 run만 이어갑니다. Liblinear는 내부 epoch checkpoint API가 없으므로 fit 도중 중단된 baseline만 같은 고정 설정으로 다시 fit합니다. 설정·데이터·feature가 바뀌면 재개를 차단합니다.
 
@@ -197,8 +199,8 @@ Epoch 로그에는 train/validation의 AP·BCE·Brier, train–validation AP 차
 Target 수집(03)과 라벨링(04)이 완료됐다면 아래 **05/06만** 실행합니다. 이 경로는 Target loader나 CUDA 추론을 호출하지 않습니다. L2·epoch 등 probe 설정 변경 때문에 01~04 또는 전체 실행 스크립트를 다시 돌리지 않습니다. 모델·context·생성 설정이 같은 응답/표현 cache를 재사용하며, 수집 code hash는 당시 provenance로 보존합니다. 학습 코드 hash는 별도 training lock에 기록합니다.
 
 ```bash
-python scripts/05_train.py --config configs/experiment.yaml --output-dir outputs/runs/context128k-l2-v1 --resume
-python scripts/06_evaluate.py --config configs/experiment.yaml --output-dir outputs/runs/context128k-l2-v1 --resume
+python scripts/05_train.py --config configs/experiment.yaml --output-dir outputs/runs/context56k-l2-v1 --resume
+python scripts/06_evaluate.py --config configs/experiment.yaml --output-dir outputs/runs/context56k-l2-v1 --resume
 ```
 
 `--output-dir`은 학습·평가 산출물만 분리합니다. 기존 config의 data 경로와 output의 `reports/label_coverage.json`을 그대로 읽으므로 응답·표현·라벨을 다시 만들지 않습니다. 기존 학습 결과도 덮어쓰지 않습니다. 설정이 달라진 학습은 새 output-dir을 사용하고, 같은 탐색의 중단만 `--resume`으로 잇습니다. Test 평가(06)는 후보 선택이 끝난 뒤 실행합니다. GPU 서버에서 결과를 가져올 때는 `data/representations/*.safetensors`, `data/responses/*.json`, `data/labeled/turns.jsonl`, manifests와 label coverage도 필요합니다. 앞서 공유한 결과 압축파일처럼 예측·checkpoint만 있는 파일은 전체 재학습 cache가 아닙니다. 경로 표기는 config의 data/output 루트 기준입니다.
@@ -207,20 +209,20 @@ CPU에서도 PyTorch·safetensors·scikit-learn 등 requirements는 필요하지
 
 ### P1 T1 ConShift 학습 진단
 
-각 probe의 epoch 로그 `outputs/runs/context128k/logs/*_training.jsonl`의 `diagnostics`에 train/validation 각각의 gate 평균·표준편차·분위수·포화 비율, gate a/c, distance 분포, 현재 표현과 raw/gated 차분의 logit 기여, 기여의 평균 절댓값 비율과 부호 충돌 비율을 저장합니다. 클래스별 gate·distance·차분 기여와 train에서 정한 turn/distance 구간별 AP·BCE·Brier·표본 및 group 수도 기록합니다. Epoch 진단의 threshold는 고정 0.5이며 최종 선택 모델 보고서는 validation 선택 threshold를 사용합니다. 핵심 지표와 gate 분포는 epoch마다 콘솔에도 출력합니다.
+각 probe의 epoch 로그 `outputs/runs/context56k/logs/*_training.jsonl`의 `diagnostics`에 train/validation 각각의 gate 평균·표준편차·분위수·포화 비율, gate a/c, distance 분포, 현재 표현과 raw/gated 차분의 logit 기여, 기여의 평균 절댓값 비율과 부호 충돌 비율을 저장합니다. 클래스별 gate·distance·차분 기여와 train에서 정한 turn/distance 구간별 AP·BCE·Brier·표본 및 group 수도 기록합니다. Epoch 진단의 threshold는 고정 0.5이며 최종 선택 모델 보고서는 validation 선택 threshold를 사용합니다. 핵심 지표와 gate 분포는 epoch마다 콘솔에도 출력합니다.
 
 `gate_0`, `gate_05`, `gate_1`, `gate_train_mean`은 동일하게 학습된 head에 gate만 바꾸는 추론 ablation입니다. 마지막 값은 해당 epoch의 train gate 평균을 validation에도 그대로 적용합니다. 이 비교는 각각 새로 학습한 P1/T1/고정 gate baseline이 아니며 인과적인 성능 보증으로 해석하지 않습니다. Gate가 적응적으로 동작하는지, 단순한 차분 크기 조절 효과인지 진단하는 자료입니다.
 
 자동 best로 선택된 모델의 train/validation 상세 보고서는 `reports/{p1,t1,conshift}_diagnostics.json`, 표본별 예측·라벨·group·turn·gate·distance·logit 기여는 `diagnostics/{모델}_{train,validation}.jsonl`에 저장합니다. 이를 모델 간 sample_id로 비교할 수 있습니다. Test 데이터는 이 학습 진단에 사용하지 않으며 진단값은 loss·best 선택·early stopping 기준을 바꾸지 않습니다. 추가 epoch 진단이 없는 이전 학습 checkpoint는 새 signature와 맞지 않아 재개가 차단됩니다. 수집의 코드 hash도 변경되므로 기존 수집 run을 임의로 덮어쓰거나 hash를 수정해 재개하지 않습니다.
 
-`06_evaluate.py --resume`은 `outputs/runs/context128k/evaluation/`의 완료 모델 예측을 재사용합니다. Paired group bootstrap은 50 replicate마다 RNG와 진행 상태를 저장하고 같은 난수 순서로 재개합니다.
+`06_evaluate.py --resume`은 `outputs/runs/context56k/evaluation/`의 완료 모델 예측을 재사용합니다. Paired group bootstrap은 50 replicate마다 RNG와 진행 상태를 저장하고 같은 난수 순서로 재개합니다.
 
 실제로 평가한 후 다음 결과를 생성합니다.
 
-- `outputs/runs/context128k/predictions/`: 동일 cohort의 ID/OOD raw prediction JSONL
-- `outputs/runs/context128k/reports/`: AP·AUROC·F1·Brier·ECE·prevalence, paired group bootstrap 2,000회·95% CI, latency, parameter count, gate·turn/shift 분석
-- `outputs/runs/context128k/figures/`: PR·ROC·reliability·gate-distance 그림
-- `outputs/runs/context128k/logs/`: 실제 epoch별 학습 이력
+- `outputs/runs/context56k/predictions/`: 동일 cohort의 ID/OOD raw prediction JSONL
+- `outputs/runs/context56k/reports/`: AP·AUROC·F1·Brier·ECE·prevalence, paired group bootstrap 2,000회·95% CI, latency, parameter count, gate·turn/shift 분석
+- `outputs/runs/context56k/figures/`: PR·ROC·reliability·gate-distance 그림
+- `outputs/runs/context56k/logs/`: 실제 epoch별 학습 이력
 
 표현 추출 forward 비용과 생성 비용을 모두 기록합니다. Subgroup cutpoint는 train에서만 구합니다. Single-class AP/AUROC는 null로 기록하고 OOD 제외 사유를 명시합니다. 실행하지 않은 checkpoint·prediction·metric·결과표를 미리 생성하지 않습니다. 생성물은 Git에서 제외하고 폴더 구조만 `.gitkeep`으로 유지합니다.
 

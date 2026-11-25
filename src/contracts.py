@@ -77,7 +77,7 @@ def config(path):
             or t['trust_remote_code'] or len(t['revision']) != 40):
         raise Blocked('Invalid frozen Target contract')
     expected = {'model_id':'Qwen/Qwen3-4B-Instruct-2507', 'dtype':'bfloat16',
-                'max_new_tokens':1024, 'max_context_tokens':131072, 'use_cache':True,
+                'max_new_tokens':1024, 'max_context_tokens':57344, 'use_cache':True,
                 'system_prompt':None}
     if any(t.get(k) != v for k,v in expected.items()):
         raise Blocked('Target configuration differs from registered protocol')

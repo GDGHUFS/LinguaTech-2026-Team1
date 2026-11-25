@@ -1,7 +1,7 @@
 seed: 42
 paths:
-  data: data/runs/context128k
-  output: outputs/runs/context128k
+  data: data/runs/context56k
+  output: outputs/runs/context56k
 source:
   dataset_revision: 47115ae2af4830948f3f15697221a1acca6078a7
   repository_commit: 00be379c882c15353d43dbabe0bf91ee4152b6c8
@@ -15,7 +15,7 @@ target:
   batch_size: 1
   do_sample: false
   max_new_tokens: 1024
-  max_context_tokens: 131072
+  max_context_tokens: 57344
   use_cache: true
   trust_remote_code: false
   system_prompt: null
