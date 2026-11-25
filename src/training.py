@@ -1,6 +1,7 @@
-"""One seed, one fit per model; validation AP/Brier checkpoint selection."""
+"""CPU probes with equal L2 search budgets and validation-only selection."""
 import copy
 import hashlib
+import json
 from pathlib import Path
 import random
 import time
@@ -9,14 +10,38 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from .contracts import (Blocked, digest, file_hash, paths, read_json, read_jsonl,
-                        write_json, write_jsonl, gate)
+                        write_json, write_jsonl, gate, code_hash)
 from .checkpointing import save_torch, save_joblib
 from .features import temporal_features
 from .representation import SampleCache
 from .probes import PROBES
 from .metrics import metrics, select_threshold
 from .baselines import build_baselines, baseline_input
-from .training_selection import patience_improved
+from .training_selection import patience_improved, select_l2_candidate
+from .probe_diagnostics import diagnose
+
+
+def probe_diagnostics(model, train_features, train_y, val_features, val_y,
+                      rows=None, threshold=.5):
+    """No test inputs; subgroup cutpoints and fixed gate come from train only."""
+    with torch.inference_mode():
+        gate_parameters = ({'a':float(model.gate_a.item()),'c':float(model.gate_c.item())}
+                           if hasattr(model,'gate_a') else None)
+        fixed_gate = (float(model.gate_value(train_features[2]).mean())
+                      if gate_parameters is not None else 1.)
+        weight = model.head.weight.detach().cpu().numpy()
+        bias = float(model.head.bias.item())
+    cuts = {'distance':np.quantile(train_features[2].cpu().numpy().ravel(),[.33,.67]).tolist()}
+    if rows is not None:
+        cuts['turn'] = np.quantile([r['turn_index'] for r in rows[0]],[.33,.67]).tolist()
+    reports, predictions = {}, {}
+    for i,(split,features,y) in enumerate((('train',train_features,train_y),
+                                          ('validation',val_features,val_y))):
+        reports[split], predictions[split] = diagnose(
+            tuple(t.detach().cpu().numpy() for t in features), y.detach().cpu().numpy(),
+            weight,bias,gate_parameters,fixed_gate,threshold,
+            rows=None if rows is None else rows[i],cutpoints=cuts)
+    return reports, predictions
 
 
 def seed_all():
@@ -45,7 +70,7 @@ def predict_probe(model, features):
 
 
 def fit_probe(name, train_features, train_y, validation_features, validation_y, cfg,
-              checkpoint_dir=None, resume=False, provenance=None):
+              checkpoint_dir=None, resume=False, provenance=None, diagnostic_rows=None):
     if len(torch.unique(validation_y)) != 2 or len(torch.unique(train_y)) != 2:
         raise Blocked('Train and validation require both classes')
     seed_all()
@@ -60,7 +85,8 @@ def fit_probe(name, train_features, train_y, validation_features, validation_y, 
     min_delta = cfg['early_stopping_min_delta']
     patience_improved((0., 0.), None, min_delta)  # Validate before fitting.
     provenance = provenance or {}
-    signature = digest({'protocol':'conshift-training-v3', 'name':name, 'config':cfg, 'provenance':provenance,
+    signature = digest({'protocol':'conshift-training-v3', 'diagnostics_version':1,
+        'name':name, 'config':cfg, 'provenance':provenance,
         'tensors':[{'shape':list(t.shape), 'sha256':hashlib.sha256(t.detach().cpu().contiguous().numpy().tobytes()).hexdigest()}
                    for t in (*train_features,train_y,*validation_features,validation_y)]})
     last_path = Path(checkpoint_dir) / (name + '.last.pt') if checkpoint_dir is not None else None
@@ -127,6 +153,9 @@ def fit_probe(name, train_features, train_y, validation_features, validation_y, 
             wait += 1
         history[-1].update(best_checkpoint_improved=improved,
                            patience_reset=reset_patience, stale_epochs=wait)
+        diagnostics, _ = probe_diagnostics(model,train_features,train_y,
+            validation_features,validation_y,rows=diagnostic_rows)
+        history[-1]['diagnostics'] = diagnostics
         finished = wait >= cfg['patience'] or epoch == cfg['max_epochs']
         elapsed = elapsed_before + time.perf_counter() - started
         if last_path is not None:
@@ -155,6 +184,11 @@ def fit_probe(name, train_features, train_y, validation_features, validation_y, 
                     'validation_brier':-best[1],'training_config':cfg,'run_signature':signature,
                     'parameter_count':sum(p.numel() for p in model.parameters())}})
             write_jsonl(Path(checkpoint_dir).parent / 'logs' / (name + '_training.jsonl'),history)
+            print(json.dumps({'model':name,'epoch':epoch,'train_ap':train_result['AP'],
+                'validation_ap':result['AP'],'validation_bce':validation_bce,
+                'validation_brier':result['Brier'],'validation_gate':diagnostics['validation']['gate'],
+                'gate_parameters':diagnostics['validation']['gate_parameters'],
+                'stale_epochs':wait}),flush=True)
         if finished:
             break
     model.load_state_dict(best_state)
@@ -182,9 +216,37 @@ def load_probe(path):
     return model.eval(), meta
 
 
+def search_probe(name, train_features, train_y, val_features, val_y, cfg,
+                 checkpoint_dir, resume=False, provenance=None, diagnostic_rows=None):
+    """Fit each candidate once from the same seed; never inspect test data."""
+    candidates = []
+    root = Path(checkpoint_dir) / 'search' / name
+    for index, coefficient in enumerate(cfg['l2_candidates']):
+        candidate_cfg = {**cfg, 'l2_lambda':coefficient}
+        folder = root / f'l2-{index:02d}' / 'checkpoints'
+        _, meta, _ = fit_probe(name,train_features,train_y,val_features,val_y,
+            candidate_cfg,checkpoint_dir=folder,resume=resume,provenance=provenance,
+            diagnostic_rows=diagnostic_rows)
+        candidates.append({**meta,'candidate_index':index,'l2_lambda':coefficient,
+                           'checkpoint':str((folder / (name + '.best.pt')).resolve())})
+        write_json(root / 'progress.json',{'completed_candidates':candidates,
+                   'selection_source':'validation','search_config':cfg})
+    selected = candidates[select_l2_candidate(candidates)]
+    model, meta = load_probe(selected['checkpoint'])
+    meta.update(search_config=cfg, selected_l2=selected['l2_lambda'],
+                hyperparameter_selection_source='validation',
+                search_training_seconds=sum(c['training_seconds'] for c in candidates))
+    report = {'model_name':name,'selection_source':'validation',
+              'selection_rule':'AP max, Brier min, earlier epoch, grid order',
+              'candidates':candidates,'selected_l2':meta['selected_l2'],
+              'selected_candidate_index':selected['candidate_index']}
+    return model, meta, report
+
+
 def train(cfg, resume=False):
     data, output = paths(cfg)
-    coverage = read_json(output / 'reports/label_coverage.json')
+    collection_output = Path(cfg['paths'].get('collection_output',output))
+    coverage = read_json(collection_output / 'reports/label_coverage.json')
     if coverage['status'] != 'PASS' or not coverage['all_original_turns_collected']:
         raise Blocked('G3 final collection/coverage gate did not pass')
     labeled = read_jsonl(data / 'labeled/turns.jsonl')
@@ -201,6 +263,8 @@ def train(cfg, resume=False):
         raise Blocked('Training artifacts already exist; use --resume to continue the same run')
     cache = SampleCache(data)
     run = read_json(data / 'manifests/collection_lock.json')
+    if run['target'] != cfg['target']:
+        raise Blocked('Cached Target configuration differs from training config')
     for r in records:
         cache.load(r['sample_id'], run['fingerprint'], r['prompt_hash'], r['prompt_token_ids_hash'])
     train_features, val_features = feature_tensors(train_rows, cache), feature_tensors(val_rows, cache)
@@ -213,20 +277,33 @@ def train(cfg, resume=False):
                   'train_sample_hash': digest([r['sample_id'] for r in train_rows]),
                   'validation_sample_hash': digest([r['sample_id'] for r in val_rows])}
     summary = {}
-    training_lock = {'provenance':provenance,'training_config':cfg['training']}
+    training_lock = {'provenance':provenance,'training_config':cfg['training'],
+                     'protocol':'validation-l2-search-v1','training_code_hash':code_hash()}
     write_json(checkpoint_dir / 'training_run.json',training_lock,immutable=True)
     for name in PROBES:
         deployed = checkpoint_dir / (name + '.pt')
         if resume and deployed.exists():
             model, meta = load_probe(deployed)
             if (meta['model_name'] != name or any(meta.get(k) != v for k,v in provenance.items())
-                    or meta['training_config'] != cfg['training']):
+                    or meta.get('search_config') != cfg['training']):
                 raise Blocked('Completed probe checkpoint differs from the resumed run')
         else:
-            model, meta, history = fit_probe(name, train_features, labels(train_rows), val_features, labels(val_rows),
-                cfg['training'],checkpoint_dir=checkpoint_dir,resume=resume,provenance=provenance)
+            model, meta, search_report = search_probe(name, train_features, labels(train_rows), val_features, labels(val_rows),
+                cfg['training'],checkpoint_dir=checkpoint_dir,resume=resume,provenance=provenance,
+                diagnostic_rows=(train_rows,val_rows))
+            write_json(output / 'reports' / (name + '_l2_search.json'),search_report)
             save_torch(deployed,{'state_dict':model.state_dict(),'metadata':meta})
-            write_jsonl(output / 'logs' / (name + '_training.jsonl'),history)
+        # Keep a convenient top-level log for the selected candidate.
+        selected_index = cfg['training']['l2_candidates'].index(meta['selected_l2'])
+        selected_log = checkpoint_dir / 'search' / name / f'l2-{selected_index:02d}' / 'logs' / (name + '_training.jsonl')
+        write_jsonl(output / 'logs' / (name + '_training.jsonl'),read_jsonl(selected_log))
+        diagnostics, diagnostic_predictions = probe_diagnostics(model,train_features,labels(train_rows),
+            val_features,labels(val_rows),rows=(train_rows,val_rows),threshold=meta['threshold'])
+        write_json(output / 'reports' / (name + '_diagnostics.json'),
+                   {'selected_epoch':meta['epoch'],'threshold_source':'validation',
+                    'provenance':provenance,'splits':diagnostics})
+        for split, predictions in diagnostic_predictions.items():
+            write_jsonl(output / 'diagnostics' / (name + '_' + split + '.jsonl'),predictions)
         summary[name] = meta
         write_json(output / 'reports/training_progress.json',{'completed_models':list(summary),'run':training_lock})
     for name, model in build_baselines().items():

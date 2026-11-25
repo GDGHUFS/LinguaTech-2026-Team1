@@ -1,6 +1,7 @@
 """Seven stage entry points with explicit readiness, never fabricated artifacts."""
 import argparse
 import json
+from pathlib import Path
 from .contracts import (Blocked, config, paths, read_json, read_jsonl,
                         write_json, gate)
 
@@ -15,10 +16,14 @@ def main(stage):
         parser.add_argument('--resume', action='store_true')
     if stage in (5,6):
         parser.add_argument('--resume', action='store_true', help='Resume the same checkpointed run without changing the experiment')
+        parser.add_argument('--output-dir', help='Separate probe run output; reuse data and coverage from the configured collection run')
     if stage == 7:
         parser.add_argument('--input', help='JSON file of user-supplied synthetic privacy scenario')
     args = parser.parse_args()
     cfg = config(args.config)
+    if stage in (5,6) and args.output_dir:
+        cfg['paths']['collection_output'] = cfg['paths']['output']
+        cfg['paths']['output'] = str(Path(args.output_dir).resolve())
     data, output = paths(cfg)
     try:
         if stage == 1:

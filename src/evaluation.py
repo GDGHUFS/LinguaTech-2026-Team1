@@ -152,7 +152,7 @@ def figures(rows, output, split):
 
 def evaluate(cfg,resume=False):
     data, output = paths(cfg)
-    cov = read_json(output / 'reports/label_coverage.json')
+    cov = read_json(Path(cfg['paths'].get('collection_output',output)) / 'reports/label_coverage.json')
     if cov['status'] != 'PASS':
         raise Blocked('G3 label coverage did not pass')
     labeled = read_jsonl(data / 'labeled/turns.jsonl')

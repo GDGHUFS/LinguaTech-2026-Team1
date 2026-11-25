@@ -82,7 +82,8 @@ def config(path):
     if any(t.get(k) != v for k,v in expected.items()):
         raise Blocked('Target configuration differs from registered protocol')
     expected_training = {'optimizer':'Adam', 'learning_rate':.001, 'batch_size':64,
-        'max_epochs':100, 'patience':10, 'l2_lambda':.0001, 'class_weighting':False,
+        'max_epochs':200, 'patience':10, 'l2_lambda':.0001,
+        'l2_candidates':[.0001,.001,.01,.1], 'class_weighting':False,
         'oversampling':False, 'scheduler':None, 'gradient_clipping':None,
         'precision':'float32', 'selection_metric':'validation_ap',
         'selection_tiebreaker':'validation_brier', 'early_stopping_min_delta':0.001}

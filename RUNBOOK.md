@@ -172,23 +172,46 @@ Context 길이는 고정 Qwen tokenizer로 공식 원본 150개 trajectory / 7,6
 |---|---|
 | Seed | 42 |
 | Optimizer / learning rate | Adam / 0.001 |
-| Batch size / 최대 epoch | 64 / 100 |
+| Batch size / 최대 epoch | 64 / 200 |
 | Patience | 10 epoch |
-| Loss | BCEWithLogitsLoss + head weight에만 L2=0.0001 |
+| Loss | BCEWithLogitsLoss + head weight L2, 후보 0.0001 / 0.001 / 0.01 / 0.1 |
 | Checkpoint 선택 | Validation AP 최대 → 동률이면 Brier 최소 → 동률이면 이른 epoch |
 | F1 threshold | Validation에서 선택하고 ID/OOD에 고정 |
 
 P1은 현재 normalized 표현, T1은 현재 표현과 직전 turn 대비 차분, ConShift는 cosine distance로 차분 기여를 조절하는 학습 가능한 gate를 사용합니다. Gate a/c는 0에서 시작합니다. 새로운 auxiliary task·state head·operation head는 없습니다. G1은 train-only TF-IDF+LR, L1은 train-only 길이 StandardScaler+LR입니다.
 
-`outputs/runs/context128k/checkpoints/`에 각 probe의 `*.last.pt`, `*.best.pt`, 최종 `p1.pt`·`t1.pt`·`conshift.pt`를 저장합니다. 매 epoch `last`에 optimizer·epoch·patience·best state·난수·shuffle 상태까지 저장하며 `best`는 최적 validation 모델입니다. G1/L1은 joblib와 metadata를 저장합니다.
+P1/T1/ConShift 각각 동일한 L2 후보 4개를 seed 42, Adam lr 0.001, batch 64, 최대 200 epoch, **patience 10 고정**으로 탐색합니다. 모델별 최적 L2는 validation AP 최대 → Brier 최소 → 이른 epoch → 미리 정한 후보 순서로 고릅니다. Test는 선택에 사용하지 않습니다. Gate 구조·BCE·head weight만의 L2 정의·split·checker·라벨은 유지합니다. 기존 최소 AP 개선량 0.001도 유지합니다. G1/L1의 학습 설정은 바꾸지 않습니다.
+
+각 후보의 checkpoint는 `checkpoints/search/{모델}/l2-00`~`l2-03` 아래 `checkpoints/*.last.pt`, `*.best.pt`, `epochs/`에, epoch 로그는 후보 폴더의 `logs/`에 저장합니다. 최적 후보의 최종 `p1.pt`·`t1.pt`·`conshift.pt`는 출력 루트의 `checkpoints/`에 배치하며 선택 후보 로그도 루트 `logs/`로 복사합니다. `reports/{모델}_l2_search.json`에는 모든 후보의 validation 결과·최적 L2·epoch를 기록합니다. Metadata의 `training_config`는 선택한 계수이고 `search_config`는 전체 탐색 설정입니다. 매 epoch `last`에는 optimizer·epoch·patience·best state·난수·shuffle 상태까지 저장합니다. G1/L1은 joblib와 metadata를 저장합니다.
 
 Epoch 로그에는 train/validation의 AP·BCE·Brier, train–validation AP 차이, validation–train BCE·Brier 차이와 patience 초기화 여부·stale epoch 수를 기록합니다. BCE는 epoch 종료 시 동일한 모델로 계산한 정규화 항 제외 loss입니다. 이 기록으로 train 성능만 개선되고 validation 성능은 악화되는지 확인합니다. L2·early stopping·group 분리는 과적합 위험을 줄이는 장치이며 과적합이 없음을 보장하지 않습니다. `early_stopping_min_delta=0.001`이며 마지막 patience 초기화 시점 대비 validation AP가 0.001 이상 증가해야 patience를 초기화합니다. 작은 AP 개선은 누적해서 판단하며 Brier 개선만으로는 초기화하지 않습니다. Best checkpoint는 중단 기준과 별개로 실제 validation AP 최대 → Brier 최소 → 이른 epoch 순서로 계속 저장합니다.
 
-각 probe의 매 epoch 가중치도 `outputs/runs/context128k/checkpoints/epochs/conshift.epoch-012.pt` 같은 경로에 보관합니다. 각 파일에는 해당 epoch의 validation 기반 threshold와 provenance가 포함됩니다. Train/validation 곡선을 보고 자동 best와 다른 epoch를 수동 선택할 수 있습니다. Epoch와 threshold 선택은 test를 보기 전에 확정합니다. 기본 평가 명령은 계속 자동 선택된 최종 checkpoint를 사용하므로, 수동 선택 시에는 선택한 epoch와 이유를 기록하고 해당 checkpoint로 평가 경로를 구성해야 합니다. 이미 평가한 run의 checkpoint를 덮어쓰거나 기존 평가 cache와 혼용하지 않습니다. BCE는 이진 분류의 cross entropy이고 AP는 average precision입니다.
+각 probe의 매 epoch 가중치도 `outputs/runs/context128k/checkpoints/search/conshift/l2-00/checkpoints/epochs/conshift.epoch-012.pt` 같은 경로에 보관합니다. 각 파일에는 해당 epoch의 validation 기반 threshold와 provenance가 포함됩니다. Train/validation 곡선을 보고 자동 best와 다른 epoch를 수동 선택할 수 있습니다. Epoch와 threshold 선택은 test를 보기 전에 확정합니다. 기본 평가 명령은 계속 자동 선택된 최종 checkpoint를 사용하므로, 수동 선택 시에는 선택한 epoch와 이유를 기록하고 해당 checkpoint로 평가 경로를 구성해야 합니다. 이미 평가한 run의 checkpoint를 덮어쓰거나 기존 평가 cache와 혼용하지 않습니다. BCE는 이진 분류의 cross entropy이고 AP는 average precision입니다.
 
 `05_train.py --resume`은 완료 모델을 재학습하지 않고 중단된 동일 run만 이어갑니다. Liblinear는 내부 epoch checkpoint API가 없으므로 fit 도중 중단된 baseline만 같은 고정 설정으로 다시 fit합니다. 설정·데이터·feature가 바뀌면 재개를 차단합니다.
 
 ## 평가와 결과 저장
+
+### 수집 완료 cache에서 CPU 학습만 다시 실행
+
+Target 수집(03)과 라벨링(04)이 완료됐다면 아래 **05/06만** 실행합니다. 이 경로는 Target loader나 CUDA 추론을 호출하지 않습니다. L2·epoch 등 probe 설정 변경 때문에 01~04 또는 전체 실행 스크립트를 다시 돌리지 않습니다. 모델·context·생성 설정이 같은 응답/표현 cache를 재사용하며, 수집 code hash는 당시 provenance로 보존합니다. 학습 코드 hash는 별도 training lock에 기록합니다.
+
+```bash
+python scripts/05_train.py --config configs/experiment.yaml --output-dir outputs/runs/context128k-l2-v1 --resume
+python scripts/06_evaluate.py --config configs/experiment.yaml --output-dir outputs/runs/context128k-l2-v1 --resume
+```
+
+`--output-dir`은 학습·평가 산출물만 분리합니다. 기존 config의 data 경로와 output의 `reports/label_coverage.json`을 그대로 읽으므로 응답·표현·라벨을 다시 만들지 않습니다. 기존 학습 결과도 덮어쓰지 않습니다. 설정이 달라진 학습은 새 output-dir을 사용하고, 같은 탐색의 중단만 `--resume`으로 잇습니다. Test 평가(06)는 후보 선택이 끝난 뒤 실행합니다. GPU 서버에서 결과를 가져올 때는 `data/representations/*.safetensors`, `data/responses/*.json`, `data/labeled/turns.jsonl`, manifests와 label coverage도 필요합니다. 앞서 공유한 결과 압축파일처럼 예측·checkpoint만 있는 파일은 전체 재학습 cache가 아닙니다. 경로 표기는 config의 data/output 루트 기준입니다.
+
+CPU에서도 PyTorch·safetensors·scikit-learn 등 requirements는 필요하지만 Target weight 다운로드나 GPU는 필요하지 않습니다. 메모리는 전체 feature tensor를 담을 시스템 RAM이 필요합니다. 후보 탐색은 기존 고정 lambda 한 번의 fit과 다른 학습 프로토콜이며, 작은 validation에 대한 선택 편향을 없애는 방법은 아닙니다. 탐색 범위를 먼저 고정하고 test 결과로 후보를 추가하지 않습니다.
+
+### P1 T1 ConShift 학습 진단
+
+각 probe의 epoch 로그 `outputs/runs/context128k/logs/*_training.jsonl`의 `diagnostics`에 train/validation 각각의 gate 평균·표준편차·분위수·포화 비율, gate a/c, distance 분포, 현재 표현과 raw/gated 차분의 logit 기여, 기여의 평균 절댓값 비율과 부호 충돌 비율을 저장합니다. 클래스별 gate·distance·차분 기여와 train에서 정한 turn/distance 구간별 AP·BCE·Brier·표본 및 group 수도 기록합니다. Epoch 진단의 threshold는 고정 0.5이며 최종 선택 모델 보고서는 validation 선택 threshold를 사용합니다. 핵심 지표와 gate 분포는 epoch마다 콘솔에도 출력합니다.
+
+`gate_0`, `gate_05`, `gate_1`, `gate_train_mean`은 동일하게 학습된 head에 gate만 바꾸는 추론 ablation입니다. 마지막 값은 해당 epoch의 train gate 평균을 validation에도 그대로 적용합니다. 이 비교는 각각 새로 학습한 P1/T1/고정 gate baseline이 아니며 인과적인 성능 보증으로 해석하지 않습니다. Gate가 적응적으로 동작하는지, 단순한 차분 크기 조절 효과인지 진단하는 자료입니다.
+
+자동 best로 선택된 모델의 train/validation 상세 보고서는 `reports/{p1,t1,conshift}_diagnostics.json`, 표본별 예측·라벨·group·turn·gate·distance·logit 기여는 `diagnostics/{모델}_{train,validation}.jsonl`에 저장합니다. 이를 모델 간 sample_id로 비교할 수 있습니다. Test 데이터는 이 학습 진단에 사용하지 않으며 진단값은 loss·best 선택·early stopping 기준을 바꾸지 않습니다. 추가 epoch 진단이 없는 이전 학습 checkpoint는 새 signature와 맞지 않아 재개가 차단됩니다. 수집의 코드 hash도 변경되므로 기존 수집 run을 임의로 덮어쓰거나 hash를 수정해 재개하지 않습니다.
 
 `06_evaluate.py --resume`은 `outputs/runs/context128k/evaluation/`의 완료 모델 예측을 재사용합니다. Paired group bootstrap은 50 replicate마다 RNG와 진행 상태를 저장하고 같은 난수 순서로 재개합니다.
 

@@ -2,6 +2,15 @@
 import math
 
 
+def select_l2_candidate(candidates):
+    """Validation AP, then Brier, then epoch, then predeclared grid order."""
+    if not candidates:
+        raise ValueError('Empty L2 search')
+    return max(range(len(candidates)), key=lambda i: (
+        candidates[i]['validation_ap'], -candidates[i]['validation_brier'],
+        -candidates[i]['epoch'], -i))
+
+
 def patience_improved(rank, reference, min_delta):
     """Accumulate AP gains from the last patience reset, not the last epoch.
 
