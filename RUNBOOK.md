@@ -40,14 +40,22 @@ L40S의 공식 물리 메모리는 48GB이며 A100은 40GB/80GB 제품을 구분
 
 ### 모델 추천 순서
 
+**Weight 전체가 GPU에 올라가는 것만으로 모델을 채택하지 않습니다. Weight 로딩 후 실행 중 추가되는 KV cache·중간 activation·표현 추출 tensor·임시 작업 공간까지 처리하고도 메모리 여유가 충분해야 합니다. 부족하면 모델 크기를 낮춥니다. 상한 0.98은 이 추가 메모리를 자동 확보하거나 OOM을 방지하지 않습니다.** 가장 긴 입력에서 peak memory를 측정하고 한도에 겨우 맞는 후보는 채택하지 않습니다.
+
+현재 Target은 동결하므로 Target gradient·optimizer state는 만들지 않습니다. 큰 추가 GPU 메모리는 Target 추론·표현 추출에서 발생하며 작은 probe는 현재 CPU에서 학습합니다. 향후 Target fine-tuning까지 수행한다면 gradient·optimizer state·학습 activation 메모리까지 추가 산정해야 합니다. Weight와 실행 단계의 추가 메모리 합계가 장비 예산에 맞지 않으면 작은 모델로 내려갑니다. A100에서도 20B 이상은 선택적 상위 실험이며, 기본은 12B급입니다.
+
 아래 순서는 이번 장문 제약 실패 예측 실험의 크기·context·메모리 구조·도입 부담을 고려한 검토 순서이며, 언어 성능의 실측 순위나 GPU 호환 보증이 아닙니다. 모든 후보는 표현 추출 최적화와 실제 긴 입력 검증을 전제로 합니다. 현재 기본 실행 모델은 여전히 4B이며 다음 후보로 자동 변경되지 않습니다.
 
-| GPU | 1순위 | 2순위 | 3순위 |
+| GPU | Primary 1xB candidates | Smaller fallback | Optional 20B+ experiment |
 |---|---|---|---|
-| A100 80GB 이상 | **Gemma 3 12B IT**: 8B보다 큰 모델, 기본 128K, local/global attention 구조를 갖춘 본 실험 후보 | **Qwen3-14B**: 기존 Qwen3와 유사한 구조를 유지하는 큰 모델 후보. 128K에는 YaRN 설정 필요 | **Qwen3.5-9B**: 더 작은 weight와 hybrid attention으로 장문 메모리 효율을 우선하는 후보 |
-| L40S 48GB | **Qwen3.5-9B**: 장문 메모리 효율을 우선 검토. 전용 kernel·텍스트 backbone 추출 경로 확인 필수 | **Gemma 3 12B IT**: 9B보다 큰 모델이 필요할 때. 긴 입력의 peak memory 검증을 통과해야 채택 | **Qwen3-4B-Instruct-2507**: 위 후보가 자원·구현 제약으로 실패할 때의 pilot/대조 실험 후보. 현행 비최적화 구현의 장문 성공을 보장하지 않음 |
+| A100 80GB+ | Gemma 4 12B IT first; Qwen3-14B as an older 1xB alternative (YaRN required for 128K) | Qwen3.5-9B if the 1xB candidates exceed the measured runtime budget | Gemma 4 26B A4B IT or Qwen3.8-27B ONLY after full-weight loading AND longest-input runtime memory validation; otherwise use 12B/14B |
+| L40S 48GB | Gemma 4 12B IT, conditional on optimized extraction and longest-input validation | Qwen3.5-9B, then Gemma 4 E4B IT | Not recommended as a BF16 baseline on this device; quantization requires a separate experiment |
 
-[Gemma 3 공식 문서](https://huggingface.co/docs/transformers/model_doc/gemma3)는 5개 local sliding-window layer당 1개 global layer와 128K context를 설명합니다. [Qwen3.5 공식 문서](https://huggingface.co/docs/transformers/model_doc/qwen3_5)는 3:1 linear/full attention 혼합 구조 및 빠른 kernel이 없을 때 느리고 메모리를 더 쓰는 구현으로 fallback할 수 있음을 설명합니다. [Qwen3.5-9B 모델 카드](https://huggingface.co/Qwen/Qwen3.5-9B)의 기본 context는 262,144이며 [Qwen3-14B 모델 카드](https://huggingface.co/Qwen/Qwen3-14B#processing-long-texts)는 YaRN을 통한 131,072 확장을 안내합니다. 따라서 파라미터 수만으로 장문 메모리·속도를 판단하지 않습니다. 후보별 tokenizer가 다르므로 기존 Qwen3-4B 기준 76,848 token 예산도 다시 측정해야 합니다.
+추천 근거는 2026-11-25 확인한 공식 공개 자료입니다. [Gemma 4 모델 카드](https://huggingface.co/google/gemma-4-12B-it)는 12B/26B A4B/31B의 256K context와 local/global attention, global layer의 통합 Keys/Values를 설명합니다. [Google 메모리 안내](https://ai.google.dev/gemma/docs/core)는 로딩과 20% overhead를 포함한 BF16 추산을 12B 약 26.7GB, 26B A4B 약 57.7GB, 31B 약 69.9GB로 제시합니다. 이 값은 이번 장문 표현 추출의 peak memory가 아니며 KV cache·중간 tensor를 추가 검증해야 합니다. 26B A4B는 활성 parameter가 약 4B여도 전체 weight를 저장하므로 L40S에서 BF16 기본 후보로 쓰지 않습니다. 31B도 A100 80GB에서 장문 여유가 줄어 기본 순위 밖의 상위 실험 후보로 둡니다.
+
+[Qwen 공식 배포 목록](https://huggingface.co/Qwen)에 Qwen3.8-27B가 공개돼 있으며 [Qwen3.8-27B 모델 카드](https://huggingface.co/Qwen/Qwen3.8-27B)와 revision을 고정해 검증해야 합니다. Qwen4 서비스 출시를 로컬 실행용 소형 공개 weight 출시와 혼동하지 않습니다. 공식 [Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)는 Qwen4 아키텍처 preview라고 명시하지만 공식 목록상 180B급이므로 단일 A100/L40S의 우선 후보가 아닙니다. 검증 가능한 공식 checkpoint 없이 Qwen4 소형 모델을 추천하지 않습니다.
+
+[Qwen3.5 공식 문서](https://huggingface.co/docs/transformers/model_doc/qwen3_5)는 빠른 kernel 부재 시 느리고 메모리를 더 쓰는 구현으로 fallback할 수 있음을 설명합니다. 모델이 새롭다는 사실만으로 메모리 효율·제약 준수·probe 성능이 보장되지는 않습니다. 후보별 tokenizer가 다르므로 기존 Qwen3-4B 기준 76,848 token 예산도 다시 측정해야 합니다. Gemma 3 12B와 Qwen3-14B는 기존 비교·재현 후보로 남기되 최신 모델 추천 순서에서는 제외합니다.
 
 우선 BF16으로 검증하며 양자화는 별도 조건으로 비교합니다. Hidden state를 직접 사용하는 연구이므로 양자화에 따른 표현·응답·라벨 변화도 실험 조건으로 기록합니다. L40S에서 메모리 검증에 실패하면 context를 줄여 후반 대화를 버린 채 같은 실험이라고 보고하지 않고, A100 80GB 이상으로 옮기는 것을 우선합니다.
 
