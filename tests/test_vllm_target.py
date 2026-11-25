@@ -80,7 +80,7 @@ def test_vllm_child_uses_two_gpu_tensor_parallel_and_exact_tokens(monkeypatch):
         def generate(self, prompts, params, **kwargs):
             assert prompts == [{'prompt_token_ids': [2, 3, 4]}]
             assert params['temperature'] == 0 and params['stop_token_ids'] == [9, 10]
-            assert params['max_tokens'] == 1024 and not params['detokenize']
+            assert params['max_tokens'] == 4096 and not params['detokenize']
             return [SimpleNamespace(outputs=[SimpleNamespace(token_ids=[5, 9], finish_reason='stop')])]
     class Connection:
         def __init__(self):

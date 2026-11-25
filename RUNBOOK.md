@@ -1,6 +1,8 @@
 # ConShift 실험 실행
 
-> **`originaldata-2` 브랜치의 설치·GPU 구성·실행은 [GPU 두 장 / vLLM 실행 문서](RUNBOOK-VLLM.md)를 따릅니다.** 아래 단일 GPU 추론 구현과 모델 추천은 이전 브랜치의 기록입니다. 현재 모델은 Qwen3-4B 그대로이며 기본 데이터·결과 경로는 `context56k-vllm-2gpu`입니다. 아래 단계별 명령도 현재 YAML 경로를 사용합니다.
+현재 실행 설정은 **입력(history 포함) 최대 56K + 출력 최대 4K = 총 context 60K**입니다. 저장 경로는 `input56k-output4k-vllm-tp2`이며 설치·실행은 [현재 vLLM 런북](RUNBOOK-VLLM.md)을 따릅니다. 아래 과거 56K/1K 설정의 포함률과 실행 시간 추정은 현재 설정에 적용하지 않습니다.
+
+> **`originaldata-2` 브랜치의 설치·GPU 구성·실행은 [GPU 두 장 / vLLM 실행 문서](RUNBOOK-VLLM.md)를 따릅니다.** 아래 단일 GPU 추론 구현과 모델 추천은 이전 브랜치의 기록입니다. 현재 모델은 Qwen3-4B 그대로이며 기본 데이터·결과 경로는 `input56k-output4k-vllm-tp2`입니다. 아래 단계별 명령도 현재 YAML 경로를 사용합니다.
 
 프로젝트 루트에서 실행합니다. Target은 동결한 `Qwen/Qwen3-4B-Instruct-2507`이며 CUDA를 사용할 수 있는 NVIDIA GPU가 필요합니다. Probe와 baseline만 학습하며 Target은 fine-tuning하지 않습니다. `system_prompt: null`로 별도의 system 메시지를 넣지 않습니다. 새 사용자 대화나 가상 실험 결과는 생성하지 않습니다.
 

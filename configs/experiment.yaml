@@ -1,7 +1,7 @@
 seed: 42
 paths:
-  data: data/runs/context56k-vllm-2gpu
-  output: outputs/runs/context56k-vllm-2gpu
+  data: data/runs/input56k-output4k-vllm-tp2
+  output: outputs/runs/input56k-output4k-vllm-tp2
 source:
   dataset_revision: 47115ae2af4830948f3f15697221a1acca6078a7
   repository_commit: 00be379c882c15353d43dbabe0bf91ee4152b6c8
@@ -25,8 +25,8 @@ target:
     request_timeout_seconds: 1800
   batch_size: 1
   do_sample: false
-  max_new_tokens: 1024
-  max_context_tokens: 57344
+  max_new_tokens: 4096
+  max_context_tokens: 61440
   use_cache: true
   trust_remote_code: false
   system_prompt: null

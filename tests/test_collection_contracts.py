@@ -91,7 +91,7 @@ def test_truncation_stays_in_history_without_blocking_next_turn(setup_collection
     cfg,data,rows,events,target = setup_collection
     def truncated(self,inputs):
         events.append('generate')
-        return '',True,1024
+        return '',True,cfg['target']['max_new_tokens']
     monkeypatch.setattr(target,'generate',truncated)
     collect(cfg)
     assert events.count('generate') == len(rows)

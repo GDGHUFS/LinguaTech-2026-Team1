@@ -4,7 +4,25 @@
 
 이것은 **하나의 응답을 두 GPU가 함께 계산하는 모델 병렬화**입니다. 서로 다른 대화를 GPU마다 하나씩 처리하는 데이터 병렬화는 적용하지 않습니다. 각 대화의 turn 순서도 유지합니다. A100 80GB 두 장 또는 L40S 두 장을 대상으로 하며, 실제 긴 입력의 메모리와 처리 시간은 서버에서 검증해야 합니다.
 
-모델은 기존 `Qwen/Qwen3-4B-Instruct-2507`, revision `cdbee75f17c01a7cc42f958dc650907174af0554`를 유지합니다. BF16, greedy 생성, 출력 1,024 token, context 57,344, seed 42, 원본 대화 순서와 probe 학습 설정도 유지합니다. Context를 늘리거나 양자화를 적용하지 않습니다.
+모델은 기존 `Qwen/Qwen3-4B-Instruct-2507`, revision `cdbee75f17c01a7cc42f958dc650907174af0554`를 유지합니다. BF16, greedy 생성, seed 42, 원본 대화 순서와 probe 학습 설정도 유지합니다. 현재 입력(history 전체) 최대는 **57,344 token(56K)**, 출력 상한은 **4,096 token(4K)**, 입력+출력 총 context는 **61,440 token(60K)**입니다. 양자화는 적용하지 않습니다.
+
+```yaml
+max_context_tokens: 61440
+max_new_tokens: 4096
+```
+
+과거의 총 context 56K·출력 1K에서 계산한 98.65% 포함률(1.35% 제외)은 현재 설정의 보장값이 아닙니다. 응답이 길어지면 다음 turn의 history도 길어집니다. 원본 데이터에는 정확히 1,900단어 또는 1,800단어 초과를 요구하는 제약이 있어 4K 출력을 선택했지만, 실제 출력 필요 길이와 context 제외율은 새 pilot에서 확인합니다. 131K context가 모든 대화 보존에 필수라는 근거도 현재는 없습니다. 기존 약 76,848 token 예산 역시 매 응답 최대 1K 가정에 한정된 값입니다.
+
+## GPU 담당자 전달 사항
+
+1. 실행 중인 이전 수집을 중단하고 기존 산출물을 보관합니다. 이전 1K pilot export가 필요하면 기존 코드·설정 상태에서 먼저 `pilot_export.py`를 실행해 보관한 다음 `originaldata-2`의 이번 변경을 반영합니다.
+2. Qwen3-4B, A100 80GB 두 장, vLLM TP=2를 유지합니다. 출력 4K 및 총 context 60K는 YAML과 `src/contracts.py`에 함께 반영되어 있으므로 YAML만 추가 변경하지 않습니다.
+3. 새 `input56k-output4k-vllm-tp2` 경로에서 audit → split → pilot을 실행합니다. 이전 출력 1K의 응답·표현·라벨·checkpoint를 복사하지 않습니다.
+4. Pilot 결과의 출력 잘림률, context 초과 수, 최대 prompt 길이, 생성 길이 분포, turn당 시간 및 GPU별 peak memory를 확인합니다. `pilot_export.py`가 생성하는 `pilot_turns.jsonl`, `pilot_summary.json`, progress 및 GPU 로그를 공유합니다. Python 스크립트 자체는 결과 데이터가 아닙니다.
+5. 1K에서 잘린 응답은 필요한 최종 길이를 알 수 없는 관측입니다. 4K pilot의 응답 내용에서 정상적인 장문 작성과 반복 생성을 구분하고, 원본 길이 제약을 함께 봅니다. 기존 1.35% 추정이나 test 성능을 근거로 출력 상한을 결정하지 않습니다.
+6. 출력 상한을 확정한 뒤 동일 설정·코드·패키지·경로에서 본 수집을 이어갑니다. 4K pilot에서 생성한 결과는 재사용합니다. 2K·8K 등 다른 상한으로 바꾸면 고정 설정 검사와 총 context(입력 56K + 출력 상한), 새 경로를 함께 변경하고 새 pilot을 수행합니다. 상한만 변경해 진행 중 cache에 섞지 않습니다.
+
+`pilot_export.py`는 GPU 서버의 프로젝트 루트에서 해당 가상환경으로 실행합니다. 스크립트의 기본 export 목적지는 `/data/orig2-pilot-export.tar.gz`이므로 기존 export가 있다면 별도로 보관하고 실행합니다. 이 스크립트는 종료된 pilot의 cache를 읽어 내보내는 용도로 사용합니다. 본 수집의 라벨링·학습·평가도 반드시 전체 생성 완료 후 같은 설정의 결과로 수행합니다.
 
 ## 설치
 
@@ -17,7 +35,7 @@ python3.11 -m venv .venv-vllm
 source .venv-vllm/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-vllm.txt
-python -m nltk.downloader -d data/runs/context56k-vllm-2gpu/raw/nltk_data -e punkt punkt_tab
+python -m nltk.downloader -d data/runs/input56k-output4k-vllm-tp2/raw/nltk_data -e punkt punkt_tab
 nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 python -c 'import torch, vllm; print(torch.__version__, vllm.__version__, torch.cuda.device_count())'
 ```
@@ -68,7 +86,7 @@ python scripts/05_train.py --config configs/experiment.yaml --resume
 python scripts/06_evaluate.py --config configs/experiment.yaml --resume
 ```
 
-데이터는 `data/runs/context56k-vllm-2gpu/`, 결과는 `outputs/runs/context56k-vllm-2gpu/`에 저장합니다. 기존 56K run은 덮어쓰지 않습니다. Backend/kernel 및 TP 설정 변경으로 BF16 계산과 응답이 이전 run과 달라질 수 있으므로 이전 Transformers 또는 GPU 역할 분리 버전의 응답·표현·라벨·checkpoint를 복사해서 재개하지 않습니다. 역할 분리 버전을 이미 실행했다면 새 `paths.data`와 `paths.output`으로 시작합니다.
+데이터는 `data/runs/input56k-output4k-vllm-tp2/`, 결과는 `outputs/runs/input56k-output4k-vllm-tp2/`에 저장합니다. 기존 56K run은 덮어쓰지 않습니다. Backend/kernel 및 TP 설정 변경으로 BF16 계산과 응답이 이전 run과 달라질 수 있으므로 이전 Transformers 또는 GPU 역할 분리 버전의 응답·표현·라벨·checkpoint를 복사해서 재개하지 않습니다. 역할 분리 버전을 이미 실행했다면 새 `paths.data`와 `paths.output`으로 시작합니다.
 
 ## 추론과 표현 추출
 
