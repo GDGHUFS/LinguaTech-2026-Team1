@@ -18,9 +18,10 @@ def last_nonpadding(attention_mask):
 def extract(model, inputs):
     model.eval()
     with torch.inference_mode():
-        result = model(**inputs, output_hidden_states=True, use_cache=False, return_dict=True)
+        # FrozenTarget passes the bare Qwen3 backbone: no LM head or all-layer tuple.
+        result = model(**inputs, output_hidden_states=False, use_cache=False, return_dict=True)
         index = last_nonpadding(inputs['attention_mask'])
-        h = result.hidden_states[-1][torch.arange(index.shape[0], device=index.device), index]
+        h = result.last_hidden_state[torch.arange(index.shape[0], device=index.device), index]
         if h.shape[-1] != model.config.hidden_size or not valid_vector(h):
             raise Blocked('Invalid returned final-layer hidden state')
     return h[0].float().cpu().contiguous(), int(index[0])

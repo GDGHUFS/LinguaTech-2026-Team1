@@ -28,13 +28,13 @@ def test_context56k_protocol_and_isolated_paths(tmp_path):
     import yaml
     cfg = config(ROOT / 'configs/experiment.yaml')
     assert cfg['target']['max_context_tokens'] == 57344
-    assert cfg['target']['gpu_memory_fraction'] == .98
+    assert cfg['target']['gpu_memory_fraction'] == .40
     assert cfg['training']['early_stopping_min_delta'] == .001
     assert cfg['training']['max_epochs'] == 200
     assert cfg['training']['patience'] == 10
     assert cfg['training']['l2_candidates'] == [.0001,.001,.01,.1]
-    assert cfg['paths']['data'] == str(ROOT / 'data/runs/context56k')
-    assert cfg['paths']['output'] == str(ROOT / 'outputs/runs/context56k')
+    assert cfg['paths']['data'] == str(ROOT / 'data/runs/context56k-vllm-2gpu')
+    assert cfg['paths']['output'] == str(ROOT / 'outputs/runs/context56k-vllm-2gpu')
     cfg['target']['max_context_tokens'] = 8192
     path = tmp_path / 'old.yaml'
     path.write_text(yaml.safe_dump(cfg), encoding='utf-8')

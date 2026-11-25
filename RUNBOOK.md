@@ -1,5 +1,7 @@
 # ConShift 실험 실행
 
+> **`originaldata-2` 브랜치의 설치·GPU 구성·실행은 [GPU 두 장 / vLLM 실행 문서](RUNBOOK-VLLM.md)를 따릅니다.** 아래 단일 GPU 추론 구현과 모델 추천은 이전 브랜치의 기록입니다. 현재 모델은 Qwen3-4B 그대로이며 기본 데이터·결과 경로는 `context56k-vllm-2gpu`입니다. 아래 단계별 명령도 현재 YAML 경로를 사용합니다.
+
 프로젝트 루트에서 실행합니다. Target은 동결한 `Qwen/Qwen3-4B-Instruct-2507`이며 CUDA를 사용할 수 있는 NVIDIA GPU가 필요합니다. Probe와 baseline만 학습하며 Target은 fine-tuning하지 않습니다. `system_prompt: null`로 별도의 system 메시지를 넣지 않습니다. 새 사용자 대화나 가상 실험 결과는 생성하지 않습니다.
 
 기본 설정은 context **57,344 (56K)**, 최소 AP 개선량 0.001인 새 run입니다. 데이터는 `data/runs/context56k/`, 결과는 `outputs/runs/context56k/`에 저장하여 기존 8K 및 131K pilot과 분리합니다. 이번 실행은 전체 turn의 일부 제외를 허용하는 조건이며 모든 대화의 100% 보존 실험이 아닙니다. 매 응답에 1,024 token을 잡은 보수적 예산에서는 7,517/7,620 turn(98.65%), 144/150 trajectory(96%)를 포함할 수 있습니다. 실제 응답 길이와 제외율은 실행 후 보고합니다. 기존 cache·checkpoint를 새 경로로 복사해서 재개하거나 진행 중인 pilot의 설정을 중간에 바꾸지 않습니다.

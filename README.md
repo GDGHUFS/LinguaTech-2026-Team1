@@ -1,5 +1,7 @@
 # ConShift
 
+`originaldata-2`: Qwen3-4B를 유지하며 vLLM Tensor Parallel 2로 GPU 두 장에서 응답을 생성합니다. 최종 층 표현 추출용 모델은 GPU 1에 함께 상주시킵니다. 설치와 실행은 [RUNBOOK-VLLM.md](RUNBOOK-VLLM.md)를 참고하세요.
+
 ```text
 conshift/
 ├── configs/

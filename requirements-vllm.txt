@@ -1,0 +1,4 @@
+# Linux/CUDA GPU collection environment; vLLM installs a compatible torch build.
+-r requirements.txt
+vllm==0.11.2
+transformers>=4.56,<5

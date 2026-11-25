@@ -71,9 +71,9 @@ def test_padding_selection_and_pregeneration_extraction():
             self.config = SimpleNamespace(hidden_size=2)
             self.parameter = torch.nn.Parameter(torch.ones(1), requires_grad=False)
         def forward(self, **kwargs):
-            assert kwargs['use_cache'] is False and kwargs['output_hidden_states']
+            assert kwargs['use_cache'] is False and kwargs['output_hidden_states'] is False
             assert not torch.is_grad_enabled()
-            return SimpleNamespace(hidden_states=(torch.tensor([[[1., 2.], [3., 4.], [5., 6.]]]),))
+            return SimpleNamespace(last_hidden_state=torch.tensor([[[1., 2.], [3., 4.], [5., 6.]]]))
     model = TensorOnlyModel()
     h, idx = extract(model, {'input_ids':torch.tensor([[1, 2, 0]]), 'attention_mask':torch.tensor([[1, 1, 0]])})
     assert idx == 1 and h.tolist() == [3., 4.]

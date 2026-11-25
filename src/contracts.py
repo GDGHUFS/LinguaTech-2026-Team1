@@ -81,6 +81,30 @@ def config(path):
                 'system_prompt':None}
     if any(t.get(k) != v for k,v in expected.items()):
         raise Blocked('Target configuration differs from registered protocol')
+    if t.get('backend') != 'vllm' or t.get('attention_implementation') != 'sdpa':
+        raise Blocked('This branch requires the vLLM backend and SDPA representation extraction')
+    generation = t.get('vllm', {})
+    devices = generation.get('generation_gpus')
+    if (not isinstance(devices, list) or len(devices) != 2
+            or any(type(d) is not int or d < 0 for d in devices)
+            or len(set(devices)) != 2):
+        raise Blocked('vLLM generation_gpus must contain two distinct nonnegative GPU indices')
+    if type(generation.get('tensor_parallel_size')) is not int or generation['tensor_parallel_size'] != 2:
+        raise Blocked('This branch requires vLLM tensor_parallel_size: 2')
+    if type(t.get('representation_gpu')) is not int or t['representation_gpu'] not in devices:
+        raise Blocked('representation_gpu must be one of the two generation GPUs')
+    utilization = generation.get('gpu_memory_utilization')
+    if (isinstance(utilization, bool) or not isinstance(utilization, (int, float))
+            or not 0 < utilization <= 1):
+        raise Blocked('vLLM gpu_memory_utilization must be in (0, 1]')
+    # Both processes remain resident on the extraction GPU, including between turns.
+    if fraction + utilization > 0.90 + 1e-9:
+        raise Blocked('Shared-GPU memory budgets must sum to at most 0.90')
+    for name in ('max_num_batched_tokens', 'startup_timeout_seconds', 'request_timeout_seconds'):
+        if type(generation.get(name)) is not int or generation[name] <= 0:
+            raise Blocked(f'vLLM {name} must be a positive integer')
+    if type(generation.get('enforce_eager')) is not bool:
+        raise Blocked('vLLM enforce_eager must be boolean')
     expected_training = {'optimizer':'Adam', 'learning_rate':.001, 'batch_size':64,
         'max_epochs':200, 'patience':10, 'l2_lambda':.0001,
         'l2_candidates':[.0001,.001,.01,.1], 'class_weighting':False,

@@ -103,3 +103,26 @@ def test_real_target_refuses_cpu_before_weight_loading(monkeypatch):
     monkeypatch.setattr(torch.cuda,'is_available',lambda:False)
     with pytest.raises(RuntimeError,match='CUDA_GPU_NOT_AVAILABLE'):
         FrozenTarget(config(ROOT / 'configs/experiment.yaml'))
+
+
+def test_dead_worker_stops_collection_and_closes_without_poisoning_cache(setup_collection, monkeypatch):
+    from src.contracts import Blocked
+    cfg, data, rows, events, target = setup_collection
+    def fail(self, inputs):
+        raise Blocked('vLLM worker exited unexpectedly')
+    monkeypatch.setattr(target, 'generate', fail)
+    monkeypatch.setattr(target, 'close', lambda self: events.append('closed'), raising=False)
+    with pytest.raises(Blocked, match='worker exited'):
+        collect(cfg)
+    assert events[-1] == 'closed'
+    assert not list((data / 'responses').glob('*.json'))
+
+
+def test_successful_collection_closes_worker_and_locks_runtime(setup_collection, monkeypatch):
+    cfg, data, rows, events, target = setup_collection
+    versions = {'vllm': 'unit-version'}
+    monkeypatch.setattr(target, 'runtime_versions', versions, raising=False)
+    monkeypatch.setattr(target, 'close', lambda self: events.append('closed'), raising=False)
+    collect(cfg)
+    assert events[-1] == 'closed'
+    assert read_json(data / 'manifests/collection_lock.json')['versions'] == versions

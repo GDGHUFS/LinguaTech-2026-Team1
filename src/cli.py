@@ -55,20 +55,23 @@ def main(stage):
         elif stage == 7:
             from .privacy_demo import PrivacyDemo
             demo = PrivacyDemo(cfg)
-            if demo.status != 'READY':
-                raise Blocked(demo.status)
-            if not args.input:
-                raise Blocked('Provide --input with synthetic identifiers and original user-supplied turns')
-            scenario = read_json(args.input)
-            if scenario.get('synthetic_identifiers_confirmed') is not True:
-                raise Blocked('Demo input must explicitly confirm synthetic identifiers')
-            results = []
-            for turn in scenario['turns']:
-                results.append(demo.step(turn['query'], turn['forbidden_identifiers'], turn['policy_description'],
-                    on_risk=lambda r: print(json.dumps({'pre_generation': r}, ensure_ascii=False), flush=True)))
-                print(json.dumps(results[-1], ensure_ascii=False), flush=True)
-            gate(cfg, 'G6', 'PASS' if len(results) >= 2 and all(r['status'] == 'OK' for r in results) else 'BLOCKED',
-                 turns=len(results), checkpoint_loaded=True)
+            try:
+                if demo.status != 'READY':
+                    raise Blocked(demo.status)
+                if not args.input:
+                    raise Blocked('Provide --input with synthetic identifiers and original user-supplied turns')
+                scenario = read_json(args.input)
+                if scenario.get('synthetic_identifiers_confirmed') is not True:
+                    raise Blocked('Demo input must explicitly confirm synthetic identifiers')
+                results = []
+                for turn in scenario['turns']:
+                    results.append(demo.step(turn['query'], turn['forbidden_identifiers'], turn['policy_description'],
+                        on_risk=lambda r: print(json.dumps({'pre_generation': r}, ensure_ascii=False), flush=True)))
+                    print(json.dumps(results[-1], ensure_ascii=False), flush=True)
+                gate(cfg, 'G6', 'PASS' if len(results) >= 2 and all(r['status'] == 'OK' for r in results) else 'BLOCKED',
+                     turns=len(results), checkpoint_loaded=True)
+            finally:
+                demo.close()
     except (Blocked, FileNotFoundError, ImportError) as exc:
         gate_name = {1:'G0', 2:'G1', 3:'G2', 4:'G3', 5:'G4', 6:'G5', 7:'G6'}[stage]
         gate(cfg, gate_name, 'BLOCKED', reason=str(exc))

@@ -1,7 +1,7 @@
 seed: 42
 paths:
-  data: data/runs/context56k
-  output: outputs/runs/context56k
+  data: data/runs/context56k-vllm-2gpu
+  output: outputs/runs/context56k-vllm-2gpu
 source:
   dataset_revision: 47115ae2af4830948f3f15697221a1acca6078a7
   repository_commit: 00be379c882c15353d43dbabe0bf91ee4152b6c8
@@ -11,7 +11,18 @@ target:
   revision: cdbee75f17c01a7cc42f958dc650907174af0554
   freeze: true
   dtype: bfloat16
-  gpu_memory_fraction: 0.98
+  gpu_memory_fraction: 0.40
+  backend: vllm
+  representation_gpu: 1
+  attention_implementation: sdpa
+  vllm:
+    generation_gpus: [0, 1]
+    tensor_parallel_size: 2
+    gpu_memory_utilization: 0.50
+    max_num_batched_tokens: 2048
+    enforce_eager: false
+    startup_timeout_seconds: 1800
+    request_timeout_seconds: 1800
   batch_size: 1
   do_sample: false
   max_new_tokens: 1024

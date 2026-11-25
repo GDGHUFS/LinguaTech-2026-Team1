@@ -50,10 +50,17 @@ class PrivacyDemo:
             self.target = target or FrozenTarget(cfg)
             protocol = self.metadata['representation_protocol']
             actual = {'dtype':str(self.target.dtype), 'template_hash':digest(self.target.tokenizer.chat_template),
-                      'code_hash':code_hash(), 'versions':{n:importlib.metadata.version(n)
-                          for n in ('torch','transformers','safetensors')}}
+                      'code_hash':code_hash(),
+                      'versions':getattr(self.target, 'runtime_versions', None) or
+                          {n:importlib.metadata.version(n) for n in ('torch','transformers','safetensors')}}
             if protocol != actual:
+                if hasattr(self.target, 'close'):
+                    self.target.close()
                 raise Blocked('Demo extraction dtype/template/code/runtime differs from training')
+
+    def close(self):
+        if self.target is not None and hasattr(self.target, 'close'):
+            self.target.close()
 
     def step(self, query, identifiers, policy_description, on_risk=None):
         if self.status != 'READY':
