@@ -66,12 +66,12 @@ def test_cpu_pipeline_reuses_collection_with_separate_output(tmp_path,monkeypatc
     cache = SampleCache(tmp_path/'data')
     torch.manual_seed(3)
     rows = []
-    for i in range(32):
+    for i in range(40):
         previous = {'sample_id':f'previous-{i}','cache_fingerprint':'fp'}
         cache.commit(previous,torch.randn(4))
         row = dict(sample_id=str(i),trajectory_id=f't-{i}',group_id=f'g-{i//2}',
-            turn_index=i+2,split='train' if i<16 else 'validation' if i<24 else 'id_test',
-            failure_label=i%2,eligible=True,cache_fingerprint='fp',
+            turn_index=i+2,split='train' if i<16 else 'validation' if i<24 else 'id_test' if i<32 else 'ood',
+            failure_label=i%2 if i<32 else int(i>32),eligible=True,cache_fingerprint='fp',
             prompt_hash='p',prompt_token_ids_hash='t',prompt_text='common sample '+('yes' if i%2 else 'no'),
             prompt_token_count=20+i,prefill_seconds=0.,generation_seconds=0.,
             total_seconds_including_retries=0.)
@@ -81,8 +81,8 @@ def test_cpu_pipeline_reuses_collection_with_separate_output(tmp_path,monkeypatc
     write_jsonl(tmp_path/'data/labeled/turns.jsonl',rows)
     write_json(tmp_path/'data/manifests/collection_lock.json',dict(target=cfg['target'],
         fingerprint='fp',dtype='torch.bfloat16',template='template',code='original-collection-code',versions={}))
-    write_json(tmp_path/'data/manifests/split_manifest.json',dict(manifest_hash='split',ood_status='DISABLED'))
-    write_json(tmp_path/'collection/reports/label_coverage.json',dict(status='PASS',
+    write_json(tmp_path/'data/manifests/split_manifest.json',dict(manifest_hash='split',ood_status='ENABLED'))
+    write_json(tmp_path/'collection/reports/label_coverage.json',dict(status='BLOCKED',
         all_original_turns_collected=True,labeled_hash=digest(rows),
         cohort_hash=digest([r['sample_id'] for r in rows]),
         id_test={'status':'PASS'},ood={'status':'BLOCKED'}))
@@ -94,5 +94,9 @@ def test_cpu_pipeline_reuses_collection_with_separate_output(tmp_path,monkeypatc
     assert first == resumed
     result = evaluation.evaluate(cfg)
     assert result['id_test']['status'] == 'PASS'
+    assert result['ood']['status'] == 'PASS'
+    assert result['ood']['coverage']['turns'] == {'0': 1, '1': 7}
+    assert result['ood']['models']['conshift']['n'] == 8
+    assert read_json(tmp_path/'probe/reports/evaluation_coverage.json')['policy'] == 'both_classes_present_v2'
     assert set(result['id_test']['models']) == {'p1','t1','conshift','g1','l1'}
     assert not (tmp_path/'collection/checkpoints').exists()

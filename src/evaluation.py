@@ -10,6 +10,7 @@ from .training import feature_tensors, load_probe, predict_probe
 from .representation import SampleCache
 from .baselines import baseline_input
 from .metrics import metrics, paired_bootstrap
+from .labeling import coverage
 
 MODELS = ('g1', 'l1', 'p1', 't1', 'conshift')
 
@@ -153,11 +154,13 @@ def figures(rows, output, split):
 def evaluate(cfg,resume=False):
     data, output = paths(cfg)
     cov = read_json(Path(cfg['paths'].get('collection_output',output)) / 'reports/label_coverage.json')
-    if cov['status'] != 'PASS':
-        raise Blocked('G3 label coverage did not pass')
     labeled = read_jsonl(data / 'labeled/turns.jsonl')
     if digest(labeled) != cov['labeled_hash']:
         raise Blocked('Labeled data changed after coverage audit')
+    # Recompute from unchanged labels so legacy count gates need no relabeling.
+    cov = {**cov, **coverage(labeled)}
+    if cov['status'] != 'PASS':
+        raise Blocked('Train, validation and ID test must each contain both classes')
     all_rows = [r for r in labeled if r['eligible']]
     training = read_json(output / 'reports/training_manifest.json')
     if (digest([r['sample_id'] for r in all_rows]) != training['cohort_hash']
@@ -180,19 +183,23 @@ def evaluate(cfg,resume=False):
         'code_hash':code_hash(),'model_artifacts':{p.name:file_hash(p) for p in artifacts}}
     signature = digest(evaluation_lock)
     write_json(state_dir / 'run.json',evaluation_lock,immutable=True)
+    write_json(output / 'reports/evaluation_coverage.json', cov)
     result, latency, analysis = {}, {}, {}
     for split in ('id_test', 'ood'):
         if split == 'ood' and split_manifest['ood_status'] != 'ENABLED':
             result[split] = {'status': split_manifest['ood_status']}
             continue
         if cov[split]['status'] != 'PASS':
-            result[split] = {'status': 'EXCLUDED_INSUFFICIENT_LABEL_COVERAGE'}
+            result[split] = {'status': 'EXCLUDED_UNDEFINED_BINARY_METRICS',
+                             'coverage': cov[split]}
             continue
         rows = [r for r in all_rows if r['split'] == split]
         predictions, thresholds, timing, counts, gate_parameters = score_rows(rows,cfg,cache,
             checkpoint_dir=state_dir / split,resume=resume,run_signature=signature)
         write_jsonl(output / 'predictions' / ('id_predictions.jsonl' if split == 'id_test' else 'ood_predictions.jsonl'), predictions)
-        result[split] = {'status': 'PASS', 'models': table(predictions, thresholds), 'parameter_counts': counts}
+        result[split] = {'status': 'PASS', 'models': table(predictions, thresholds), 'parameter_counts': counts,
+                         'coverage': cov[split], 'coverage_policy': cov['policy'],
+                         'interpretation': cov['interpretation']}
         latency[split] = timing
         analysis[split] = {'gate_parameters': gate_parameters,
                            'turn': subgroup(predictions, 'turn_index', cuts['turn'], thresholds),

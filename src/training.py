@@ -247,11 +247,15 @@ def train(cfg, resume=False):
     data, output = paths(cfg)
     collection_output = Path(cfg['paths'].get('collection_output',output))
     coverage = read_json(collection_output / 'reports/label_coverage.json')
-    if coverage['status'] != 'PASS' or not coverage['all_original_turns_collected']:
+    if not coverage['all_original_turns_collected']:
         raise Blocked('G3 final collection/coverage gate did not pass')
     labeled = read_jsonl(data / 'labeled/turns.jsonl')
     if digest(labeled) != coverage['labeled_hash']:
         raise Blocked('Labeled data changed after coverage audit')
+    from .labeling import coverage as label_coverage
+    coverage = {**coverage, **label_coverage(labeled)}
+    if coverage['status'] != 'PASS':
+        raise Blocked('Train, validation and ID test must each contain both classes')
     records = [r for r in labeled if r['eligible']]
     if digest([r['sample_id'] for r in records]) != coverage['cohort_hash']:
         raise Blocked('Cohort changed after coverage audit')

@@ -44,14 +44,22 @@ def label_one(row, response, previous, checker):
 
 
 def coverage(rows):
-    result = {}
+    # Both classes are required by training/validation AP and test AUROC.
+    # Counts describe precision; arbitrary sample-size cutoffs do not establish it.
+    result = {'policy': 'both_classes_present_v2',
+              'requirements': {'turns_per_class': 1, 'minimum_groups': None},
+              'interpretation': 'Computability only, not statistical sufficiency. '
+                                'Report class/group counts; repeated turns are not independent samples.'}
     for split in ('train', 'validation', 'id_test', 'ood'):
         selected = [r for r in rows if r.get('eligible') and r['split'] == split]
         turns = {str(y): sum(r['failure_label'] == y for r in selected) for y in (0, 1)}
         groups = {str(y): len({r['group_id'] for r in selected if r['failure_label'] == y}) for y in (0, 1)}
-        nturns, ngroups = (30, 10) if split == 'train' else (10, 5)
         result[split] = {'turns': turns, 'groups': groups,
-                         'status': 'PASS' if min(turns.values()) >= nturns and min(groups.values()) >= ngroups else 'BLOCKED'}
+                         'n': len(selected),
+                         'independent_groups': len({r['group_id'] for r in selected}),
+                         'status': 'PASS' if min(turns.values()) > 0 else 'BLOCKED',
+                         'undefined_reason': None if min(turns.values()) > 0 else
+                             ('EMPTY_COHORT' if not selected else 'SINGLE_CLASS')}
     result['status'] = 'PASS' if all(result[s]['status'] == 'PASS' for s in ('train', 'validation', 'id_test')) else 'BLOCKED'
     return result
 

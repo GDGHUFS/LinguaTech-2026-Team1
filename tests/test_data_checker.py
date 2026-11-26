@@ -111,3 +111,18 @@ def test_coverage_gate_empty():
     result = coverage([])
     assert result['status'] == 'BLOCKED'
     assert all(result[s]['status'] == 'BLOCKED' for s in ('train','validation','id_test','ood'))
+
+
+def test_coverage_requires_classes_not_arbitrary_counts():
+    rows = [dict(eligible=True, split=s, failure_label=y, group_id=s)
+            for s in ('train', 'validation', 'id_test', 'ood') for y in (0, 1)]
+    result = coverage(rows)
+    assert result['status'] == 'PASS'
+    assert result['policy'] == 'both_classes_present_v2'
+    assert result['ood']['status'] == 'PASS'
+    assert result['ood']['independent_groups'] == 1
+    rows[-2]['eligible'] = False
+    result = coverage(rows)
+    assert result['status'] == 'PASS'  # OOD availability does not block ID.
+    assert result['ood']['status'] == 'BLOCKED'
+    assert result['ood']['undefined_reason'] == 'SINGLE_CLASS'
